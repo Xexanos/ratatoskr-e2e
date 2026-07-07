@@ -140,19 +140,24 @@ and dependent on built artifacts) runs off the PR critical path. Because E2E run
 **every merge to main**, `main` stays continuously E2E-validated — so a release is
 just a git tag on a green `main` commit, with no separate release-time E2E gate.
 
+There is deliberately **no scheduled (nightly) run**. To make that safe, **all
+external inputs are pinned by digest** — the ABS image, base images, the emulator
+system image, and dependencies via lockfiles. Environment drift can then only enter
+through a deliberate pin-bump PR, which is itself E2E-gated, so drift is always
+attributed to the change that introduced it rather than surfacing later on an
+unrelated PR.
+
 | Trigger | What runs | Blocking |
 |---|---|---|
 | **PR** (any repo) | that repo's **full** suite. server: lint, typecheck, unit, component, integration, oasdiff breaking-change guard, debug build. app: lint, unit, instrumented (component + UI-integration + accessibility) on emulator, debug `.apk`. e2e: full E2E vs. last-known-good artifacts (for PRs that touch the harness/tests) | ✅ yes |
 | **Merge to `main`** (server / app) | rebuild + publish the `main` artifact (Docker image / `.apk`), then `repository_dispatch` → the e2e repo runs E2E against it (+ the other component's latest artifact → catches app↔server version drift) | ✅ keeps `main` green |
 | **Merge to `main`** (e2e) | full E2E vs. the latest published artifacts | ✅ |
-| **Nightly** (schedule) | full E2E (P1+P2) + a compatibility-matrix subset — safety net against flakiness and external drift (e.g. a new ABS image) | ⚠️ alert, non-blocking |
 | **Release** = git tag `v*` on a green `main` commit | build + sign + publish the release artifacts (multi-arch image, signed `.apk`); create the GitHub Release. No separate E2E gate — `main` was already validated | — |
-| **Manual** (`workflow_dispatch`) | targeted E2E / compatibility runs for debugging | — |
+| **Manual** (`workflow_dispatch`) | targeted E2E for debugging; the compatibility matrix (ABS versions, Android range, Sonos models), run on demand and before a major release | — |
 
 **E2E trigger mechanics:** the e2e repo owns no artifacts, so its E2E job is triggered
-by (a) a nightly schedule, (b) `repository_dispatch` from the server/app repos when they
-publish a new `main` artifact, (c) `workflow_dispatch` (manual), and (d) its own PRs that
-change the harness. Releases are driven by **git tags** (`on: push: tags: ['v*']` or
+by (a) `repository_dispatch` from the server/app repos when they publish a new `main`
+artifact, (b) `workflow_dispatch` (manual), and (c) its own PRs that change the harness. Releases are driven by **git tags** (`on: push: tags: ['v*']` or
 `on: release: types: [published]`), not by watching a version number. Cross-repo dispatch
 needs a token (PAT or GitHub App) with access to the e2e repo.
 
@@ -205,3 +210,4 @@ needs a token (PAT or GitHub App) with access to the e2e repo.
 - [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
 - [ ] Create `docs/testing.md` in the app and server repos (link back here)
 - [ ] Define staging/fixture data for ABS in E2E
+- [ ] Pin all external E2E inputs by digest (ABS image, base images, emulator system image, lockfiles) — prerequisite for having no scheduled run (§6)
