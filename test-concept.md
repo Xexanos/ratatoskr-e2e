@@ -110,16 +110,16 @@ real-hardware verification (actual audio playback — see §2).
 
 | ID | Scenario | Prio | Coverage | Status |
 |---|---|---|---|---|
-| E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Sim | Planned |
-| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Sim | Planned |
-| E2E-03 | Browse + search the library | P1 | Sim | Planned |
-| E2E-04 | Start a book on a speaker → resumes from stored position | P1 | Sim (control/state) · manual (real audio) | Planned |
-| E2E-05 | Now-playing: play / pause / seek / stop | P1 | Sim (commands/state) · manual (audio behavior) | Planned |
-| E2E-06 | Progress synced back to ABS (source of truth) | P1 | Sim — requires ABS-state assertion | Planned |
-| E2E-07 | Sign out | P2 | Sim | Planned |
-| E2E-08 | 401 → silent token refresh; active session continues | P2 | Sim | Planned |
-| E2E-09 | Speaker disappears mid-session | P2 | Sim | Planned |
-| E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Sim | Planned |
+| E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Simulator | Planned |
+| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Simulator | Planned |
+| E2E-03 | Browse + search the library | P1 | Simulator | Planned |
+| E2E-04 | Start a book on a speaker → resumes from stored position | P1 | Simulator (control/state) · manual (real audio) | Planned |
+| E2E-05 | Now-playing: play / pause / seek / stop | P1 | Simulator (commands/state) · manual (audio behavior) | Planned |
+| E2E-06 | Progress synced back to ABS (source of truth) | P1 | Simulator — requires ABS-state assertion | Planned |
+| E2E-07 | Sign out | P2 | Simulator | Planned |
+| E2E-08 | 401 → silent token refresh; active session continues | P2 | Simulator | Planned |
+| E2E-09 | Speaker disappears mid-session | P2 | Simulator | Planned |
+| E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Simulator | Planned |
 
 **Setup requirements implied by these scenarios:**
 
