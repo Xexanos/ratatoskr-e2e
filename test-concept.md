@@ -186,7 +186,7 @@ real-hardware verification (actual audio playback — see §2).
 - [x] Decide E2E tooling (stack orchestration + app driving) — §4
 - [x] Draft E2E scenarios — §5 *(priorities may still be adjusted)*
 - [ ] Define CI cadence per repo — §6
-- [ ] **Spike-B:** validate `SonosDevice.LoadDeviceData()` (device_description.xml + `ZoneGroupTopology`) against the fake — see [`spike/`](./spike/)
+- [x] **Spike-B:** validate `SonosDevice.LoadDeviceData()` + `Coordinator` path against the fake — see [`spike/`](./spike/). *(Result: needs only `DeviceProperties.GetZoneAttributes` + `RenderingControl.GetVolume`/`GetMute`; no `device_description.xml`/`ZoneGroupTopology`.)*
 - [ ] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving (cross-repo PR to `ratatoskr-app`)
 - [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
 - [ ] Create `docs/testing.md` in the app and server repos (link back here)
