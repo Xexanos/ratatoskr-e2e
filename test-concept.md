@@ -149,9 +149,9 @@ unrelated PR.
 
 | Trigger | What runs | Blocking |
 |---|---|---|
-| **PR** (any repo) | that repo's **full** suite. server: lint, typecheck, unit, component, integration, oasdiff breaking-change guard, debug build. app: lint, unit, instrumented (component + UI-integration + accessibility) on emulator, debug `.apk`. e2e: full E2E vs. last-known-good artifacts (for PRs that touch the harness/tests) | ✅ yes |
-| **Merge to `main`** (server / app) | rebuild + publish the `main` artifact (Docker image / `.apk`), then `repository_dispatch` → the e2e repo runs E2E against it (+ the other component's latest artifact → catches app↔server version drift) | ✅ keeps `main` green |
-| **Merge to `main`** (e2e) | full E2E vs. the latest published artifacts | ✅ |
+| **PR** (any repo) | that repo's **full** suite. server: lint, typecheck, unit, component, integration, oasdiff breaking-change guard, debug build. app: lint, unit, instrumented (component + UI-integration + accessibility) on emulator, debug `.apk`. e2e: full E2E vs. both components' last releases (for PRs that touch the harness/tests) | ✅ yes |
+| **Merge to `main`** (server / app) | rebuild + publish the `main` artifact, then `repository_dispatch` → the e2e repo runs E2E per the version matrix below (blocking: `main` × the other component's last release; informational: `main` × `main`) | ✅ keeps `main` green |
+| **Merge to `main`** (e2e) | full E2E vs. both components' last releases (blocking) + `main` × `main` (informational) — see matrix | ✅ |
 | **Release** = git tag `v*` on a green `main` commit | build + sign + publish the release artifacts (multi-arch image, signed `.apk`); create the GitHub Release. No separate E2E gate — `main` was already validated | — |
 | **Manual** (`workflow_dispatch`) | targeted E2E for debugging; the compatibility matrix (ABS versions, Android range, Sonos models), run on demand and before a major release | — |
 
@@ -160,6 +160,38 @@ by (a) `repository_dispatch` from the server/app repos when they publish a new `
 artifact, (b) `workflow_dispatch` (manual), and (c) its own PRs that change the harness. Releases are driven by **git tags** (`on: push: tags: ['v*']` or
 `on: release: types: [published]`), not by watching a version number. Cross-repo dispatch
 needs a token (PAT or GitHub App) with access to the e2e repo.
+
+### Artifacts & version matrix
+
+**How artifacts move — one model for both.** Everything E2E pulls lives in **GHCR**
+and is pinned by digest (consistent with the no-scheduled-run decision above):
+
+- **server image** — pushed natively (`docker push`).
+- **app `.apk`** — pushed as an OCI artifact via **ORAS**
+  (`oras push ghcr.io/xexanos/ratatoskr-app:<tag> app.apk`), pulled the same way.
+
+We deliberately do **not** use GitHub Actions artifacts for this: they cannot be
+digest-pinned, expire (default 90 days), and are awkward to fetch across repos.
+
+Two channels, published from CI (**PR builds are never published**):
+
+- **rolling** on each merge to `main` — `:main` plus an immutable `:main-<sha>`
+  (a GHCR cleanup policy prunes old shas).
+- **permanent** on release — `:v1.2.0` + `:latest`.
+
+The release `.apk` may additionally ship as a GitHub Release asset / to F-Droid for
+end-user distribution; that path is separate from E2E consumption.
+
+**Which versions E2E runs** (on a merge to `main` of repo X; the other repo = Y):
+
+| Combination | Purpose | Blocking |
+|---|---|---|
+| X@`main` × Y@**last release** | compatibility with the version in the field (server `SPEC.md §6` requires bidirectional compat); failure is cleanly attributable to X's change | ✅ yes |
+| X@`main` × Y@`main` | early integration signal for the two development tips; may go red because of Y's unreleased WIP, so it must not block X | ⚠️ non-blocking |
+
+For a PR/merge in the **e2e repo** (a harness change with no artifact of its own),
+the blocking run is **both components @ last release** (a stable baseline, so a
+failure points at the harness); `main` × `main` is the optional informational run.
 
 > Still gated on deployable artifacts (server Docker image, app `.apk`) existing —
 > see [Roadmap](#8-roadmap). Until then this describes the target cadence.
