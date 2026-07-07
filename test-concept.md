@@ -84,11 +84,17 @@ The two residual risks are covered elsewhere:
 > the **E2E tooling**; repo-local tool choices are owned by the respective repo's
 > `docs/testing.md`.
 
-| Scope | Tool |
-|---|---|
-| E2E – stack orchestration (server + ABS + Sonos sim) | *TBD (to be decided together)* |
-| E2E – driving the app | *TBD (to be decided together)* |
-| Repo-local (Unit/Component/Integration) | *owned per repo* |
+| Scope | Tool | Notes |
+|---|---|---|
+| E2E – stack orchestration | docker-compose | Ratatoskr server + Audiobookshelf image + the fake Sonos, one command |
+| E2E – Sonos | **custom stateful UPnP/SOAP fake** | The official Sonos simulator targets the cloud Control API, not the local UPnP/SOAP the server uses. A hand-built fake works — validated in [`spike/`](./spike/). Wired via the server's `SONOS_SEED_HOST` (no SSDP multicast needed). Real audio playback stays manual (§2) |
+| E2E – driving the app | **Maestro** (black-box, UiAutomator) | Requires `Modifier.semantics { testTagsAsResourceId = true }` + `testTag`s in the app (§9). Low lock-in: switching to Appium later rewrites only the thin flow layer, selectors carry over |
+| E2E – ABS assertions | small TypeScript harness | HTTP client against the ABS API to assert progress write-back (E2E-06) |
+| Repo-local (Unit/Component/Integration) | *owned per repo* | see each repo's `docs/testing.md` |
+
+> **Why a custom Sonos fake, not the official simulator:** see the throwaway
+> proof of concept in [`spike/`](./spike/) — it drives the fake with the exact
+> library the server uses (`@svrooij/sonos`) over local UPnP/SOAP with no hardware.
 
 ---
 
@@ -98,9 +104,31 @@ Cross-component use cases to be covered (most important happy paths + critical
 failure cases — not full coverage). Failure/resilience cases live **inside** E2E,
 not as a separate level.
 
-| ID | Scenario | Priority | Status |
-|---|---|---|---|
-| — | *TBD (to be derived from product behavior together)* | | |
+The **Coverage** column notes what the Sonos simulator can validate
+(control flow + reported transport state) versus what falls to manual
+real-hardware verification (actual audio playback — see §2).
+
+| ID | Scenario | Prio | Coverage | Status |
+|---|---|---|---|---|
+| E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Sim | Planned |
+| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Sim | Planned |
+| E2E-03 | Browse + search the library | P1 | Sim | Planned |
+| E2E-04 | Start a book on a speaker → resumes from stored position | P1 | Sim (control/state) · manual (real audio) | Planned |
+| E2E-05 | Now-playing: play / pause / seek / stop | P1 | Sim (commands/state) · manual (audio behavior) | Planned |
+| E2E-06 | Progress synced back to ABS (source of truth) | P1 | Sim — requires ABS-state assertion | Planned |
+| E2E-07 | Sign out | P2 | Sim | Planned |
+| E2E-08 | 401 → silent token refresh; active session continues | P2 | Sim | Planned |
+| E2E-09 | Speaker disappears mid-session | P2 | Sim | Planned |
+| E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Sim | Planned |
+
+**Setup requirements implied by these scenarios:**
+
+- The harness must be able to **read ABS state** (ABS API), not just run ABS as a
+  black box — needed to assert progress in E2E-06.
+- ABS needs **fixture data**: a known user + at least one audiobook with a known
+  starting position (E2E-04, E2E-06).
+- **Single active session** is a system invariant (one book on one speaker at a
+  time) — scenarios must not assume concurrent sessions.
 
 ---
 
@@ -141,8 +169,9 @@ not as a separate level.
 ## 8. Roadmap
 
 1. **Now:** write and agree on this test concept.
-2. **Next (open design points):** decide E2E tooling (§4), derive & prioritize
-   E2E scenarios (§5), define CI cadence (§6).
+2. **Next (open design points):** define CI cadence (§6); Spike-B (Sonos
+   discovery) and the app `testTag` change (§9). *(E2E tooling §4 and the
+   scenario draft §5 are done.)*
 3. **Once available:** Docker image for the server and `.apk` for the app as
    deployable artifacts.
 4. **Then:** set up the actual E2E test suite in this repo, targeting those
@@ -154,8 +183,11 @@ not as a separate level.
 
 ## 9. Open Points
 
-- [ ] Decide E2E tooling (stack orchestration + app driving) — §4
-- [ ] Derive and prioritize E2E scenarios — §5
+- [x] Decide E2E tooling (stack orchestration + app driving) — §4
+- [x] Draft E2E scenarios — §5 *(priorities may still be adjusted)*
 - [ ] Define CI cadence per repo — §6
+- [ ] **Spike-B:** validate `SonosDevice.LoadDeviceData()` (device_description.xml + `ZoneGroupTopology`) against the fake — see [`spike/`](./spike/)
+- [ ] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving (cross-repo PR to `ratatoskr-app`)
+- [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
 - [ ] Create `docs/testing.md` in the app and server repos (link back here)
 - [ ] Define staging/fixture data for ABS in E2E
