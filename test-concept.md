@@ -134,17 +134,30 @@ real-hardware verification (actual audio playback — see §2).
 
 ## 6. CI/CD Integration
 
-> To be decided independently — which tests run when (push/PR vs. nightly vs.
-> after a release candidate).
+**Principle:** cadence ∝ cost & flakiness. Cheap, fast, deterministic tests run on
+every PR and block merges; expensive/slow E2E (emulator + docker-compose + Maestro,
+and dependent on built artifacts) runs off the PR critical path. Because E2E runs on
+**every merge to main**, `main` stays continuously E2E-validated — so a release is
+just a git tag on a green `main` commit, with no separate release-time E2E gate.
 
-| Repo | Trigger | What runs |
+| Trigger | What runs | Blocking |
 |---|---|---|
-| ratatoskr-server | *TBD* | *TBD* |
-| ratatoskr-app | *TBD* | *TBD* |
-| ratatoskr-e2e | *TBD* | E2E (blocked until artifacts exist — see §8) |
+| **PR** (any repo) | that repo's **full** suite. server: lint, typecheck, unit, component, integration, oasdiff breaking-change guard, debug build. app: lint, unit, instrumented (component + UI-integration + accessibility) on emulator, debug `.apk`. e2e: full E2E vs. last-known-good artifacts (for PRs that touch the harness/tests) | ✅ yes |
+| **Merge to `main`** (server / app) | rebuild + publish the `main` artifact (Docker image / `.apk`), then `repository_dispatch` → the e2e repo runs E2E against it (+ the other component's latest artifact → catches app↔server version drift) | ✅ keeps `main` green |
+| **Merge to `main`** (e2e) | full E2E vs. the latest published artifacts | ✅ |
+| **Nightly** (schedule) | full E2E (P1+P2) + a compatibility-matrix subset — safety net against flakiness and external drift (e.g. a new ABS image) | ⚠️ alert, non-blocking |
+| **Release** = git tag `v*` on a green `main` commit | build + sign + publish the release artifacts (multi-arch image, signed `.apk`); create the GitHub Release. No separate E2E gate — `main` was already validated | — |
+| **Manual** (`workflow_dispatch`) | targeted E2E / compatibility runs for debugging | — |
 
-> Not yet applicable until deployable artifacts (server Docker image, app `.apk`)
-> are available — see [Roadmap](#8-roadmap).
+**E2E trigger mechanics:** the e2e repo owns no artifacts, so its E2E job is triggered
+by (a) a nightly schedule, (b) `repository_dispatch` from the server/app repos when they
+publish a new `main` artifact, (c) `workflow_dispatch` (manual), and (d) its own PRs that
+change the harness. Releases are driven by **git tags** (`on: push: tags: ['v*']` or
+`on: release: types: [published]`), not by watching a version number. Cross-repo dispatch
+needs a token (PAT or GitHub App) with access to the e2e repo.
+
+> Still gated on deployable artifacts (server Docker image, app `.apk`) existing —
+> see [Roadmap](#8-roadmap). Until then this describes the target cadence.
 
 ---
 
@@ -169,9 +182,10 @@ real-hardware verification (actual audio playback — see §2).
 ## 8. Roadmap
 
 1. **Now:** write and agree on this test concept.
-2. **Next (open design points):** define CI cadence (§6); Spike-B (Sonos
-   discovery) and the app `testTag` change (§9). *(E2E tooling §4 and the
-   scenario draft §5 are done.)*
+2. **Next:** the cross-repo prep in §9 — `docs/testing.md` in the app/server
+   repos and the app `testTag` change for black-box driving. *(Design is settled:
+   levels/types §2, tooling §4, scenario draft §5, CI cadence §6, and both Sonos
+   spikes are done.)*
 3. **Once available:** Docker image for the server and `.apk` for the app as
    deployable artifacts.
 4. **Then:** set up the actual E2E test suite in this repo, targeting those
@@ -185,7 +199,7 @@ real-hardware verification (actual audio playback — see §2).
 
 - [x] Decide E2E tooling (stack orchestration + app driving) — §4
 - [x] Draft E2E scenarios — §5 *(priorities may still be adjusted)*
-- [ ] Define CI cadence per repo — §6
+- [x] Define CI cadence — §6
 - [x] **Spike-B:** validate `SonosDevice.LoadDeviceData()` + `Coordinator` path against the fake — see [`spike/`](./spike/). *(Result: needs only `DeviceProperties.GetZoneAttributes` + `RenderingControl.GetVolume`/`GetMute`; no `device_description.xml`/`ZoneGroupTopology`.)*
 - [ ] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving (cross-repo PR to `ratatoskr-app`)
 - [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
