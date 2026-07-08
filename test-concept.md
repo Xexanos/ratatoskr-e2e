@@ -37,7 +37,7 @@ We model tests along **two independent axes**.
 | Level | Scope | Executed where | Documented where |
 |---|---|---|---|
 | Unit | single function/class, isolated | app / server repo | repo-local |
-| Component | one subsystem of a single component against simulated neighbors (e.g. networking layer, DB access) | app / server repo | repo-local |
+| Component | one subsystem of a single component against simulated neighbors (e.g. the app's networking layer, the server's position-mapping module) | app / server repo | repo-local |
 | Integration | a complete single application/component against mocks | app / server repo | repo-local |
 | E2E | full 4-part stack (App + server + ABS + Sonos simulator), no mocks | **this repo** | **here (central)** |
 
@@ -219,17 +219,15 @@ failure points at the harness); `main` × `main` is the optional informational r
 
 ## 8. Roadmap
 
-1. **Now:** write and agree on this test concept.
-2. **Next:** the cross-repo prep in §9 — `docs/testing.md` in the app/server
-   repos and the app `testTag` change for black-box driving. *(Design is settled:
-   levels/types §2, tooling §4, scenario draft §5, CI cadence §6, and both Sonos
-   spikes are done.)*
-3. **Once available:** Docker image for the server and `.apk` for the app as
-   deployable artifacts.
-4. **Then:** set up the actual E2E test suite in this repo, targeting those
-   artifacts (stack via docker-compose for server + ABS + Sonos simulator; app
-   via emulator/device).
-5. **Then:** wire up CI (§6) and fill in the E2E scenario table (§5).
+1. **Done:** this test concept — levels/types §2, tooling §4, scenario draft §5,
+   CI cadence §6 — is written and agreed; both Sonos spikes validated.
+2. **Now:** cross-repo prep (§9) — `docs/testing.md` in the app/server repos and
+   the app `testTag` change for black-box driving.
+3. **Blocked on artifacts:** a Docker image for the server and an `.apk` for the
+   app (neither exists yet).
+4. **Then:** build the actual E2E suite here against those artifacts (docker-compose
+   stack: server + ABS + fake Sonos; app via emulator/device).
+5. **Then:** wire up CI (§6) and update the E2E scenario statuses (§5) as tests land.
 
 ---
 
