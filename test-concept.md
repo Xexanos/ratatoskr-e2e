@@ -244,7 +244,7 @@ failure points at the harness); `main` × `main` is the optional informational r
 - [x] Define CI cadence — §6
 - [ ] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving (cross-repo PR to `ratatoskr-app`)
 - [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
-- [ ] Create `docs/testing.md` in the app and server repos (link back here)
+- [~] Create `docs/testing.md` in the app and server repos (link back here) — PRs open, awaiting merge: [server#16](https://github.com/Xexanos/ratatoskr-server/pull/16), [app#11](https://github.com/Xexanos/ratatoskr-app/pull/11)
 - [ ] Define staging/fixture data for ABS in E2E
 - [ ] Pin all external E2E inputs by digest (ABS image, base images, emulator system image, lockfiles) — prerequisite for having no scheduled run (§6)
 - [ ] Verify a single CI runner can host the Android emulator (needs KVM) **and** the docker-compose stack together — feasibility risk for the E2E job
