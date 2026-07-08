@@ -86,14 +86,18 @@ The two residual risks are covered elsewhere:
 | Scope | Tool | Notes |
 |---|---|---|
 | E2E – stack orchestration | docker-compose | Ratatoskr server + Audiobookshelf image + the fake Sonos, one command |
-| E2E – Sonos | **custom stateful UPnP/SOAP fake** | The official Sonos simulator targets the cloud Control API, not the local UPnP/SOAP the server uses. A hand-built fake works — validated in [`spike/`](./spike/). Wired via the server's `SONOS_SEED_HOST` (no SSDP multicast needed). Real audio playback stays manual (§2) |
+| E2E – Sonos | **custom stateful UPnP/SOAP fake** | The official Sonos simulator targets the cloud Control API, not the local UPnP/SOAP the server uses. A hand-built fake works (feasibility validated — see below). Wired via the server's `SONOS_SEED_HOST` (no SSDP multicast needed). Real audio playback stays manual (§2) |
 | E2E – driving the app | **Maestro** (black-box, UiAutomator) | Requires `Modifier.semantics { testTagsAsResourceId = true }` + `testTag`s in the app (§9). Low lock-in: switching to Appium later rewrites only the thin flow layer, selectors carry over |
 | E2E – ABS assertions | small TypeScript harness | HTTP client against the ABS API to assert progress write-back (E2E-06) |
 | Repo-local (Unit/Component/Integration) | *owned per repo* | see each repo's `docs/testing.md` |
 
-> **Why a custom Sonos fake, not the official simulator:** see the throwaway
-> proof of concept in [`spike/`](./spike/) — it drives the fake with the exact
-> library the server uses (`@svrooij/sonos`) over local UPnP/SOAP with no hardware.
+> **Feasibility (validated by a throwaway spike):** the exact library the server uses
+> (`@svrooij/sonos`) drives such a fake over local UPnP/SOAP with no hardware — both the
+> direct control flow and the full `SonosDevice.LoadDeviceData()` + `Coordinator` path.
+> Findings that shape the real fake: `LoadDeviceData()` needs only
+> `DeviceProperties.GetZoneAttributes` + `RenderingControl` volume/mute (no
+> `device_description.xml` / `ZoneGroupTopology`); discovery avoids SSDP via
+> `SONOS_SEED_HOST`; the server polls, so no UPnP event subscription is needed.
 
 ---
 
@@ -220,7 +224,7 @@ failure points at the harness); `main` × `main` is the optional informational r
 ## 8. Roadmap
 
 1. **Done:** this test concept — levels/types §2, tooling §4, scenario draft §5,
-   CI cadence §6 — is written and agreed; both Sonos spikes validated.
+   CI cadence §6 — is written and agreed; the fake-Sonos approach is validated.
 2. **Now:** cross-repo prep (§9) — `docs/testing.md` in the app/server repos and
    the app `testTag` change for black-box driving.
 3. **Blocked on artifacts:** a Docker image for the server and an `.apk` for the
@@ -236,7 +240,6 @@ failure points at the harness); `main` × `main` is the optional informational r
 - [x] Decide E2E tooling (stack orchestration + app driving) — §4
 - [x] Draft E2E scenarios — §5 *(priorities may still be adjusted)*
 - [x] Define CI cadence — §6
-- [x] **Spike-B:** validate `SonosDevice.LoadDeviceData()` + `Coordinator` path against the fake — see [`spike/`](./spike/). *(Result: needs only `DeviceProperties.GetZoneAttributes` + `RenderingControl.GetVolume`/`GetMute`; no `device_description.xml`/`ZoneGroupTopology`.)*
 - [ ] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving (cross-repo PR to `ratatoskr-app`)
 - [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
 - [ ] Create `docs/testing.md` in the app and server repos (link back here)
