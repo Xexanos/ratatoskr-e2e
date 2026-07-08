@@ -14,7 +14,7 @@ end-to-end testing consists of **four parts**:
 | App | Android app (Kotlin/Compose) – "thin remote", talks **only** to the server over HTTPS `/v1/`; no audio, no domain logic | [ratatoskr-app](https://github.com/Xexanos/ratatoskr-app) |
 | Ratatoskr server | The bridge (Node.js). Controls Sonos (UPnP/SOAP), talks to ABS (REST). Audio never flows through it | [ratatoskr-server](https://github.com/Xexanos/ratatoskr-server) |
 | Audiobookshelf (ABS) | **External.** Audiobook server; source of truth for progress and authentication | third-party |
-| Sonos simulator | **External test double.** Official Sonos control simulator standing in for physical speakers in E2E. **Not equal to real hardware** (see §2, manual verification) | third-party |
+| Fake Sonos | **Custom test double (this repo).** Stands in for physical speakers over local UPnP/SOAP. The official Sonos simulator does *not* fit — it targets the cloud Control API, not the local protocol the server uses (see §4). **Not equal to real hardware** (see §2, manual verification) | this repo |
 
 This document defines what is documented **centrally** (here) and what is
 documented **locally per repo**. Repo-local test documentation lives in
@@ -54,7 +54,7 @@ These run *at* one or more levels; they are not additional pyramid layers.
 | Accessibility | a11y checks per screen, light + dark | repo-local (app) |
 | Security | TLS trust-on-first-use, token rotation, encrypted token storage, low-privilege streamer account, log redaction | repo-local + periodic review |
 | Compatibility | matrix: ABS version (≥ 2.26), Android range (SDK 26–36), Sonos/SYMFONISK models | repo-local / matrix |
-| Manual real-hardware verification | real Sonos/SYMFONISK devices — the simulator cannot reproduce all UPnP behavior (DIDL-Lite metadata, `REL_TIME` seeking, unreliable reported track duration) | **here (central, process)** |
+| Manual real-hardware verification | real Sonos/SYMFONISK devices — the fake cannot reproduce all UPnP behavior (DIDL-Lite metadata, `REL_TIME` seeking, unreliable reported track duration) | **here (central, process)** |
 
 ---
 
