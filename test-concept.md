@@ -242,3 +242,5 @@ failure points at the harness); `main` × `main` is the optional informational r
 - [ ] Create `docs/testing.md` in the app and server repos (link back here)
 - [ ] Define staging/fixture data for ABS in E2E
 - [ ] Pin all external E2E inputs by digest (ABS image, base images, emulator system image, lockfiles) — prerequisite for having no scheduled run (§6)
+- [ ] Verify a single CI runner can host the Android emulator (needs KVM) **and** the docker-compose stack together — feasibility risk for the E2E job
+- [ ] Provision E2E secrets/fixtures beyond ABS content: a known server TLS cert + fingerprint (E2E-01 trust-on-first-use) and ABS user credentials + the low-privilege streamer account (E2E-02)
