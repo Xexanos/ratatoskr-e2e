@@ -2,7 +2,6 @@
 
 > **Scope:** overarching, cross-component test strategy for the Ratatoskr system.
 > **Status:** Draft
-> **Last updated:** 2026-07-07
 
 ## 1. Overview
 
