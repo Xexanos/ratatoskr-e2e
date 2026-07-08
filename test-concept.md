@@ -86,7 +86,7 @@ The two residual risks are covered elsewhere:
 | Scope | Tool | Notes |
 |---|---|---|
 | E2E – stack orchestration | docker-compose | Ratatoskr server + Audiobookshelf image + the fake Sonos, one command |
-| E2E – Sonos | **custom stateful UPnP/SOAP fake** | The official Sonos simulator targets the cloud Control API, not the local UPnP/SOAP the server uses. A hand-built fake works (feasibility validated — see below). Wired via the server's `SONOS_SEED_HOST` (no SSDP multicast needed). Real audio playback stays manual (§2) |
+| E2E – Sonos | **custom stateful UPnP/SOAP fake** | The official Sonos simulator targets the cloud Control API, not the local UPnP/SOAP the server uses. A hand-built fake works (feasibility validated — see below). **Owned by the server repo** (one module, two run-modes: in-process for its component tests, a GHCR image here) and consumed here pinned by digest — so server tests and E2E never drift. Wired via the server's `SONOS_SEED_HOST` (no SSDP multicast needed). Real audio playback stays manual (§2) |
 | E2E – driving the app | **Maestro** (black-box, UiAutomator) | Requires `Modifier.semantics { testTagsAsResourceId = true }` + `testTag`s in the app (§9). Low lock-in: switching to Appium later rewrites only the thin flow layer, selectors carry over |
 | E2E – ABS assertions | small TypeScript harness | HTTP client against the ABS API to assert progress write-back (E2E-06) |
 | Repo-local (Unit/Component/Integration) | *owned per repo* | see each repo's `docs/testing.md` |
@@ -174,6 +174,8 @@ and is pinned by digest (consistent with the no-scheduled-run decision above):
 - **server image** — pushed natively (`docker push`).
 - **app `.apk`** — pushed as an OCI artifact via **ORAS**
   (`oras push ghcr.io/xexanos/ratatoskr-app:<tag> app.apk`), pulled the same way.
+- **fake Sonos image** — built and published by the **server repo** (which owns the
+  fake); pulled here pinned by digest like the others.
 
 We deliberately do **not** use GitHub Actions artifacts for this: they cannot be
 digest-pinned, expire (default 90 days), and are awkward to fetch across repos.
