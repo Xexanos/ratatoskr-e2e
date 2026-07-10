@@ -242,7 +242,7 @@ failure points at the harness); `main` × `main` is the optional informational r
 - [x] Decide E2E tooling (stack orchestration + app driving) — §4
 - [x] Draft E2E scenarios — §5 *(priorities may still be adjusted)*
 - [x] Define CI cadence — §6
-- [ ] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving — PR [app#15](https://github.com/Xexanos/ratatoskr-app/pull/15) (open)
+- [x] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving — merged: [app#15](https://github.com/Xexanos/ratatoskr-app/pull/15)
 - [ ] Pin the E2E emulator/app locale (e.g. `en-US`): most elements are driven by text / contentDescription rather than test tags, so text selectors need a fixed UI language to stay stable (the app ships en-US + de-DE — see app `docs/testing.md`)
 - [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
 - [x] Create `docs/testing.md` in the app and server repos (link back here) — merged: [server#16](https://github.com/Xexanos/ratatoskr-server/pull/16), [app#11](https://github.com/Xexanos/ratatoskr-app/pull/11)
