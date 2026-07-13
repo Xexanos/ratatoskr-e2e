@@ -1,0 +1,133 @@
+name: E2E
+
+# The cross-component end-to-end suite: the real app APK on an emulator, driven black-box with
+# Maestro, against the real server + Audiobookshelf + fake Sonos (test-concept.md §4/§5).
+#
+# Triggers:
+#   - repository_dispatch (server-image): the server repo fires this after publishing a new
+#     main image (payload: image/tag/digest/sha). Blocking run: server@main x app@last-release.
+#   - workflow_dispatch: manual, with optional pins for debugging.
+#   - pull_request: harness changes, run against the latest published artifacts.
+# On a green server-image run it dispatches `e2e-passed` back so the server promotes the tested
+# digest (server promote.yml).
+
+on:
+  repository_dispatch:
+    types: [server-image, app-validated]
+  workflow_dispatch:
+    inputs:
+      server_image:
+        description: "Server image ref (default: :latest)"
+        default: ""
+      server_sha:
+        description: "Server commit sha (to match the fake-sonos sha-<sha> tag)"
+        default: ""
+      app_release_tag:
+        description: "App pre-release tag (default: newest testing-*)"
+        default: ""
+  pull_request:
+    paths-ignore: ['**/*.md', 'docs/**', 'LICENSE', '.gitignore']
+
+concurrency:
+  group: e2e-${{ github.event.client_payload.sha || github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read      # pull the server + fake-sonos images from GHCR
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve artifact inputs
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ] && [ "${{ github.event.action }}" = "server-image" ]; then
+            img='${{ github.event.client_payload.image }}'
+            digest='${{ github.event.client_payload.digest }}'
+            tag='${{ github.event.client_payload.tag }}'
+            if [ -n "$digest" ]; then echo "SERVER_IMAGE=${img}@${digest}" >> "$GITHUB_ENV"; else echo "SERVER_IMAGE=${img}:${tag}" >> "$GITHUB_ENV"; fi
+            echo "SERVER_SHA=${{ github.event.client_payload.sha }}" >> "$GITHUB_ENV"
+          else
+            [ -n "${{ inputs.server_image }}" ] && echo "SERVER_IMAGE=${{ inputs.server_image }}" >> "$GITHUB_ENV" || true
+            [ -n "${{ inputs.server_sha }}" ] && echo "SERVER_SHA=${{ inputs.server_sha }}" >> "$GITHUB_ENV" || true
+            [ -n "${{ inputs.app_release_tag }}" ] && echo "APP_RELEASE_TAG=${{ inputs.app_release_tag }}" >> "$GITHUB_ENV" || true
+          fi
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch pinned artifacts (server + fake-sonos images, app APK)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/fetch-artifacts.sh
+
+      - name: Bring up the stack (ABS + fake-sonos + server, seeded)
+        run: bash scripts/run-e2e.sh up
+
+      - name: Cache the AVD snapshot
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api36-x86_64-default-pixel_6
+
+      - name: Drive the app + assert (Maestro + ABS progress)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/run-e2e.sh drive
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          mkdir -p logs
+          docker compose -f compose.e2e.yaml logs --no-color > logs/compose.log 2>&1 || true
+          cp -r ~/.maestro/tests logs/maestro 2>/dev/null || true
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with: { name: e2e-logs, path: logs, retention-days: 14 }
+
+      - name: Tear down
+        if: always()
+        run: bash scripts/run-e2e.sh down
+
+      - name: Promote the tested server image (green server-image run)
+        if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'server-image'
+        env:
+          GH_TOKEN: ${{ secrets.SERVER_PROMOTE_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::notice::SERVER_PROMOTE_TOKEN not set; skipping promotion."; exit 0; fi
+          gh api repos/${{ github.repository_owner }}/ratatoskr-server/dispatches \
+            -f event_type=e2e-passed \
+            -F client_payload[digest]='${{ github.event.client_payload.digest }}' \
+            -F client_payload[channels]=latest
