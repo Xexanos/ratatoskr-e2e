@@ -1,6 +1,13 @@
 # Dependencies
 node_modules/
 
+# E2E run artifacts and generated files
+/artifacts/
+/logs/
+/.e2e.env
+/.e2e.artifacts.env
+/fixtures/audiobooks/
+
 # IDE
 .idea/
 
