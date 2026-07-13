@@ -1,0 +1,74 @@
+# Ratatoskr E2E - P1 happy-path spine (test-concept.md §5, E2E-01..05), one app session.
+# E2E-06 (progress synced back to ABS) is asserted out-of-band by scripts/assert-abs-progress.sh
+# after this flow, since only ABS is proof the position persisted.
+#
+# Driven black-box via Maestro. Selectors: the four resource-ids exposed by app#15
+# (library_search, library_row, speaker_row, nowplaying_seek) and otherwise the app's English
+# text / contentDescription (the app UI is English-only).
+#
+# NOTE (first-run tuning): the server-URL field and the Library->Speaker->Now-Playing tap
+# sequence have no test tags; the selectors below are best-effort and must be confirmed on the
+# first CI run (maestro studio / the recorded hierarchy). Anything marked CONFIRM may need an
+# adjusted selector - or a small testTag added to the app as a follow-up.
+appId: io.github.xexanos.ratatoskr
+env:
+  SERVER_URL: "https://localhost:8080"
+  ABS_USER: "e2e"
+  ABS_PASS: "e2e-listener-pw1"
+  BOOK_TITLE: "Test Book"
+  SPEAKER_NAME: "E2E Test Room"
+---
+# ---------- E2E-01: connect to the server + trust-on-first-use ----------
+- launchApp:
+    clearState: true          # fresh install semantics: start on the Connect screen
+- assertVisible: "Connect"
+- tapOn: "Server URL"          # CONFIRM: the only editable field on Connect (no testTag)
+- eraseText
+- inputText: "${SERVER_URL}"
+- hideKeyboard
+- tapOn: "Connect"
+- assertVisible: "Trust and continue"   # the certificate confirmation card (TOFU)
+- tapOn: "Trust and continue"
+
+# ---------- E2E-02: sign in with ABS credentials ----------
+- assertVisible: "Sign in"
+- tapOn: "Username"            # CONFIRM: field label
+- inputText: "${ABS_USER}"
+- tapOn: "Password"            # CONFIRM: field label
+- inputText: "${ABS_PASS}"
+- hideKeyboard
+- tapOn: "Sign in"
+- assertVisible:
+    id: "library_search"       # landed on the library -> signed in
+
+# ---------- E2E-02 (cont.): session survives an app restart ----------
+- stopApp
+- launchApp                    # no clearState: trusted server + tokens must persist
+- assertVisible:
+    id: "library_search"       # straight to the library, not Connect/SignIn
+
+# ---------- E2E-03: browse + search ----------
+- assertVisible: "${BOOK_TITLE}"
+- tapOn:
+    id: "library_search"
+- inputText: "${BOOK_TITLE}"
+- hideKeyboard
+- assertVisible: "${BOOK_TITLE}"   # still shown when it matches the query
+- eraseText                        # clear the search back to the full list
+- hideKeyboard
+
+# ---------- E2E-04: start the book on a speaker (resumes from the seeded position) ----------
+- tapOn:
+    id: "library_row"
+    index: 0                   # the fixture book row
+# CONFIRM: navigation from the item to picking a speaker and starting playback.
+- tapOn:
+    id: "speaker_row"
+    index: 0                   # the fake speaker ("${SPEAKER_NAME}")
+# ---------- E2E-05: now-playing controls ----------
+- assertVisible: "Pause"       # contentDescription is "Pause" while PLAYING (resumed + playing)
+- tapOn: "Pause"
+- assertVisible: "Play"        # toggled to paused
+- tapOn: "Play"
+- assertVisible: "Pause"       # playing again
+# leave it playing; assert-abs-progress.sh then verifies ABS received the advanced position.
