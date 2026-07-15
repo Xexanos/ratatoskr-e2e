@@ -83,6 +83,13 @@ done
 [ -n "$item" ] && [ "${duration:-0}" -gt 0 ] || die "fixture item never got a duration (last code $(last_code))"
 log "item=$item duration=${duration}s"
 
+# The compose runs ABS with a short ACCESS_TOKEN_EXPIRY (E2E-08), and the scan poll above is the
+# one step that can outlive it - re-login so everything below never runs on an expired admin token.
+log "re-login as root (short ACCESS_TOKEN_EXPIRY; the scan poll may have outlived the first token)"
+admin="$(api POST /login "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{username:$u,password:$p}')" \
+  | abs_token_from)"
+[ -n "$admin" ] || die "root re-login failed (code $(last_code))"
+
 create_user() { # username password -> prints user id
   local u="$1" p="$2"
   api POST /api/users "$(jq -nc --arg u "$u" --arg p "$p" '{username:$u,password:$p,type:"user",isActive:true}')" "$admin" >/dev/null || true
