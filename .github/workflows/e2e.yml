@@ -48,6 +48,11 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # Pin Maestro (the install script honors MAESTRO_VERSION) so a new upstream release or a
+      # get.maestro.mobile.dev outage can't silently change or break the blocking promotion
+      # pipeline. Bump deliberately - keep it in step with the harness. 2.6.1 = the first green run.
+      MAESTRO_VERSION: "2.6.1"
     permissions:
       contents: read
       packages: read      # pull the server + fake-sonos images from GHCR
@@ -96,10 +101,19 @@ jobs:
         uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
 
+      - name: Cache Maestro
+        id: maestro-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.maestro
+          key: maestro-${{ env.MAESTRO_VERSION }}
+
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        if: steps.maestro-cache.outputs.cache-hit != 'true'
+        run: curl -fsSL "https://get.maestro.mobile.dev" | bash
+
+      - name: Add Maestro to PATH
+        run: echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
