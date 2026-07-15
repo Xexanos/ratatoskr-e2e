@@ -87,6 +87,12 @@ cmd_drive() {
   echo "run-e2e: asserting ABS progress (E2E-06)"
   bash "$root/scripts/assert-abs-progress.sh" "$ENV_FILE"
 
+  echo "run-e2e: pausing playback (E2E-05 pause)"
+  maestro test "$root/flows/p1-pause.yaml"
+
+  echo "run-e2e: asserting the fake speaker actually paused (E2E-05)"
+  bash "$root/scripts/assert-fake-transport.sh" PAUSED_PLAYBACK
+
   echo "run-e2e: stopping playback (E2E-05 stop)"
   maestro test "$root/flows/p1-stop.yaml"
 
