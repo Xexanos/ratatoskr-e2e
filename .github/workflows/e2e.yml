@@ -109,6 +109,9 @@ jobs:
         if: failure()
         run: |
           mkdir -p logs
+          # docker compose interpolates image refs from these; source them so `logs` renders the
+          # real container output instead of an "image variable missing" interpolation error.
+          set -a; [ -f .e2e.artifacts.env ] && . .e2e.artifacts.env; [ -f .e2e.env ] && . .e2e.env; set +a
           docker compose -f compose.e2e.yaml logs --no-color > logs/compose.log 2>&1 || true
           cp -r ~/.maestro/tests logs/maestro 2>/dev/null || true
       - name: Upload logs on failure
