@@ -53,13 +53,15 @@ env:
     id: "library_search"       # straight to the library, not Connect/SignIn
 
 # ---------- E2E-03: browse + search ----------
-- assertVisible: "${BOOK_TITLE}"
+- assertVisible: "${BOOK_TITLE}"        # the book shows in the full library
 - tapOn:
     id: "library_search"
 - inputText: "${BOOK_TITLE}"
-- hideKeyboard
-- assertVisible: "${BOOK_TITLE}"   # still shown when it matches the query
-- eraseText                        # clear the search back to the full list
+- assertVisible: "${BOOK_TITLE}"        # still shown, now filtered to the search match
+# ONE hideKeyboard, while the keyboard is definitely up (right after typing). Calling it again
+# when the keyboard is already down registers as Back and, on the root Library screen, exits the
+# app to the launcher — that's what failed the previous run. The filtered list keeps the matching
+# row, so E2E-04 taps it directly (no need to clear the search).
 - hideKeyboard
 
 # ---------- E2E-04: start the book on a speaker (resumes from the seeded position) ----------
