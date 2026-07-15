@@ -43,16 +43,35 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Resolve artifact inputs
+        # Dispatch payload and workflow inputs are passed as environment variables and referenced
+        # as shell variables ("$PAYLOAD_IMAGE"), never interpolated into the script text. A
+        # ${{ … }} expansion happens before the shell parses the line, so a payload field holding
+        # `'; rm -rf … ; '` would execute - and this repo's dispatch is reachable by anyone with
+        # the E2E_DISPATCH_TOKEN, with SERVER_PROMOTE_TOKEN in reach downstream. Same hardened
+        # idiom the server repo's container.yml uses.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PAYLOAD_IMAGE: ${{ github.event.client_payload.image }}
+          PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          INPUT_SERVER_IMAGE: ${{ inputs.server_image }}
+          INPUT_FAKE_SONOS_IMAGE: ${{ inputs.fake_sonos_image }}
+          INPUT_APP_RELEASE_TAG: ${{ inputs.app_release_tag }}
         run: |
-          if [ "${{ github.event_name }}" = "repository_dispatch" ] && [ "${{ github.event.action }}" = "server-image" ]; then
-            img='${{ github.event.client_payload.image }}'
-            digest='${{ github.event.client_payload.digest }}'
-            tag='${{ github.event.client_payload.tag }}'
-            if [ -n "$digest" ]; then echo "SERVER_IMAGE=${img}@${digest}" >> "$GITHUB_ENV"; else echo "SERVER_IMAGE=${img}:${tag}" >> "$GITHUB_ENV"; fi
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$EVENT_ACTION" = "server-image" ]; then
+            [ -n "$PAYLOAD_IMAGE" ] || { echo "::error::server-image dispatch missing 'image'"; exit 1; }
+            if [ -n "$PAYLOAD_DIGEST" ]; then
+              echo "SERVER_IMAGE=${PAYLOAD_IMAGE}@${PAYLOAD_DIGEST}" >> "$GITHUB_ENV"
+            elif [ -n "$PAYLOAD_TAG" ]; then
+              echo "SERVER_IMAGE=${PAYLOAD_IMAGE}:${PAYLOAD_TAG}" >> "$GITHUB_ENV"
+            else
+              echo "::error::server-image dispatch carried neither digest nor tag"; exit 1
+            fi
           else
-            [ -n "${{ inputs.server_image }}" ] && echo "SERVER_IMAGE=${{ inputs.server_image }}" >> "$GITHUB_ENV" || true
-            [ -n "${{ inputs.fake_sonos_image }}" ] && echo "FAKE_SONOS_IMAGE=${{ inputs.fake_sonos_image }}" >> "$GITHUB_ENV" || true
-            [ -n "${{ inputs.app_release_tag }}" ] && echo "APP_RELEASE_TAG=${{ inputs.app_release_tag }}" >> "$GITHUB_ENV" || true
+            [ -n "$INPUT_SERVER_IMAGE" ] && echo "SERVER_IMAGE=$INPUT_SERVER_IMAGE" >> "$GITHUB_ENV" || true
+            [ -n "$INPUT_FAKE_SONOS_IMAGE" ] && echo "FAKE_SONOS_IMAGE=$INPUT_FAKE_SONOS_IMAGE" >> "$GITHUB_ENV" || true
+            [ -n "$INPUT_APP_RELEASE_TAG" ] && echo "APP_RELEASE_TAG=$INPUT_APP_RELEASE_TAG" >> "$GITHUB_ENV" || true
           fi
 
       - name: Enable KVM for the emulator
@@ -127,9 +146,11 @@ jobs:
         if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'server-image'
         env:
           GH_TOKEN: ${{ secrets.SERVER_PROMOTE_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
         run: |
           if [ -z "$GH_TOKEN" ]; then echo "::notice::SERVER_PROMOTE_TOKEN not set; skipping promotion."; exit 0; fi
-          gh api repos/${{ github.repository_owner }}/ratatoskr-server/dispatches \
+          gh api "repos/$OWNER/ratatoskr-server/dispatches" \
             -f event_type=e2e-passed \
-            -F client_payload[digest]='${{ github.event.client_payload.digest }}' \
+            -F "client_payload[digest]=$PAYLOAD_DIGEST" \
             -F client_payload[channels]=latest
