@@ -17,10 +17,10 @@ on:
   workflow_dispatch:
     inputs:
       server_image:
-        description: "Server image ref (default: :latest)"
+        description: "Server image ref, e.g. ghcr.io/xexanos/ratatoskr-server-testing:testing-<sha> or @sha256:… (default: the release :latest, which exists only after the first promotion)"
         default: ""
-      server_sha:
-        description: "Server commit sha (to match the fake-sonos sha-<sha> tag)"
+      fake_sonos_image:
+        description: "Fake Sonos image ref (default: :latest; pin a sha-<sha> or @sha256:… to override)"
         default: ""
       app_release_tag:
         description: "App pre-release tag (default: newest testing-*)"
@@ -49,10 +49,9 @@ jobs:
             digest='${{ github.event.client_payload.digest }}'
             tag='${{ github.event.client_payload.tag }}'
             if [ -n "$digest" ]; then echo "SERVER_IMAGE=${img}@${digest}" >> "$GITHUB_ENV"; else echo "SERVER_IMAGE=${img}:${tag}" >> "$GITHUB_ENV"; fi
-            echo "SERVER_SHA=${{ github.event.client_payload.sha }}" >> "$GITHUB_ENV"
           else
             [ -n "${{ inputs.server_image }}" ] && echo "SERVER_IMAGE=${{ inputs.server_image }}" >> "$GITHUB_ENV" || true
-            [ -n "${{ inputs.server_sha }}" ] && echo "SERVER_SHA=${{ inputs.server_sha }}" >> "$GITHUB_ENV" || true
+            [ -n "${{ inputs.fake_sonos_image }}" ] && echo "FAKE_SONOS_IMAGE=${{ inputs.fake_sonos_image }}" >> "$GITHUB_ENV" || true
             [ -n "${{ inputs.app_release_tag }}" ] && echo "APP_RELEASE_TAG=${{ inputs.app_release_tag }}" >> "$GITHUB_ENV" || true
           fi
 
