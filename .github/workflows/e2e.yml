@@ -131,12 +131,30 @@ jobs:
         run: bash scripts/run-e2e.sh up
 
       - name: Cache the AVD snapshot
+        id: avd-cache
         uses: actions/cache@v6
         with:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-api36-x86_64-default-pixel_6
+
+      # On a cache miss, boot the emulator once WITHOUT -no-snapshot-save so a quick-boot snapshot
+      # is written into the AVD before the cache action saves it. The real run below then boots
+      # from that snapshot. Without this step the cached AVD never contains a snapshot (the drive
+      # step always passes -no-snapshot-save), so every run cold-boots and the cache saves nothing.
+      - name: Generate the AVD snapshot (cache miss only)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "AVD snapshot generated"
 
       - name: Drive the app + assert (Maestro + ABS progress)
         uses: reactivecircus/android-emulator-runner@v2
