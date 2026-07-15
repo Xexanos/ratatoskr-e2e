@@ -1,11 +1,19 @@
 # Ratatoskr E2E - E2E-10 (recovery): ABS is back (the harness restarted it and waited for
-# /status). Clearing the probe query re-issues the full-library request, which must succeed
-# again - proving the error state was transient, not sticky.
+# /status). Re-issuing the library request must succeed again - proving the error state was
+# transient, not sticky.
+#
+# The search field still holds the probe text from p2-abs-down and is focused, with the cursor
+# at the END (that flow's last action was inputText). Do NOT tapOn the field first: a tap
+# re-positions the cursor into the middle of the text, and eraseText only deletes to the LEFT of
+# the cursor - it would leave a trailing fragment (e.g. "obe"), the query would stay a non-match,
+# and the book would never return. Erase from the end, then search the real title: a distinct
+# query re-fires the load (the debounced pipeline drops identical queries) and returns the book.
 appId: io.github.xexanos.ratatoskr
 ---
-- tapOn:
-    id: "library_search"
-- eraseText
+- eraseText: 40                # clears the ~19-char probe from the end-positioned cursor
+- inputText: "${BOOK_TITLE}"
 - extendedWaitUntil:
-    visible: "${BOOK_TITLE}"
+    visible:
+      id: "library_row"
     timeout: 15000
+- assertVisible: "${BOOK_TITLE}"
