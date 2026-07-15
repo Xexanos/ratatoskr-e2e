@@ -17,18 +17,21 @@ token="$(curl -sS -H 'x-return-tokens: true' -H 'Content-Type: application/json'
   "$ABS_BASE/login" | jq -r '.user.token // .user.accessToken // .accessToken // empty')"
 [ -n "$token" ] || { echo "assert-abs-progress: could not log in as $E2E_ABS_USER" >&2; exit 1; }
 
-current="$(curl -sS -H "Authorization: Bearer $token" "$ABS_BASE/api/me/progress/$E2E_ITEM_ID" \
-  | jq -r '(.currentTime // 0)')"
-current="${current%.*}"  # floor to whole seconds
+# Poll: the session keeps playing (server-side) after Maestro exits, and the server's sync loop
+# writes the advancing position every couple of seconds - give it a window to cross the resume
+# point rather than reading once and racing the loop.
+current=0
+for _ in $(seq 1 15); do
+  current="$(curl -sS -H "Authorization: Bearer $token" "$ABS_BASE/api/me/progress/$E2E_ITEM_ID" \
+    | jq -r '(.currentTime // 0)')"
+  current="${current%.*}"  # floor to whole seconds
+  echo "assert-abs-progress: ABS currentTime=${current:-0}s (start ${E2E_RESUME_SECONDS}s, duration ${E2E_BOOK_DURATION}s)"
+  if [ -n "$current" ] && [ "$current" -gt "$E2E_RESUME_SECONDS" ] && [ "$current" -lt "$E2E_BOOK_DURATION" ]; then
+    echo "assert-abs-progress: PASS - progress advanced to ${current}s and was persisted to ABS"
+    exit 0
+  fi
+  sleep 2
+done
 
-echo "assert-abs-progress: ABS currentTime=${current}s (start was ${E2E_RESUME_SECONDS}s, duration ${E2E_BOOK_DURATION}s)"
-
-if [ -z "$current" ] || [ "$current" -le "$E2E_RESUME_SECONDS" ]; then
-  echo "assert-abs-progress: FAIL - position did not advance past the resume point; sync did not reach ABS" >&2
-  exit 1
-fi
-if [ "$current" -ge "$E2E_BOOK_DURATION" ]; then
-  echo "assert-abs-progress: FAIL - position ${current}s is beyond the book (${E2E_BOOK_DURATION}s)" >&2
-  exit 1
-fi
-echo "assert-abs-progress: PASS - progress advanced to ${current}s and was persisted to ABS"
+echo "assert-abs-progress: FAIL - position did not advance past the resume point (${E2E_RESUME_SECONDS}s) within the poll window; last=${current}s. The server did not sync a moving position to ABS." >&2
+exit 1

@@ -26,13 +26,16 @@ services:
       - ./fixtures/audiobooks:/audiobooks:ro
 
   fake-sonos:
-    image: ${FAKE_SONOS_IMAGE:?set FAKE_SONOS_IMAGE (ghcr.io/xexanos/ratatoskr-fake-sonos:sha-<sha>)}
+    image: ${FAKE_SONOS_IMAGE:?set FAKE_SONOS_IMAGE (ghcr.io/xexanos/ratatoskr-fake-sonos:latest or @sha256:…)}
     environment:
       PORT: "1400"
       # The zone-group Location URL the fake advertises must be reachable by the server, so it
       # must be the address the server uses to reach the fake - the compose service name.
       ADVERTISE_HOST: fake-sonos
       ROOM_NAME: E2E Test Room
+      # Advance RelTime with the wall clock while PLAYING, so a real session's position moves and
+      # the server syncs it back to ABS (E2E-06). Test-only; the fake defaults to a static position.
+      FAKE_ADVANCE: "1"
 
   ratatoskr:
     image: ${SERVER_IMAGE:?set SERVER_IMAGE (ghcr.io/xexanos/ratatoskr-server@sha256:<digest>)}
