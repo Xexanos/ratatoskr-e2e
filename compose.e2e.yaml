@@ -63,6 +63,11 @@ services:
       # Point the server straight at the fake over unicast - no SSDP multicast on a bridge.
       SONOS_SEED_HOST: fake-sonos:1400
       SONOS_DISABLE_EVENTS: "1"
+      # Short Sonos SOAP timeout so E2E-09 (speaker disappears -> the container is stopped, which
+      # drops packets rather than refusing) surfaces "Sonos is unavailable" quickly, well inside
+      # p2-speaker-lost's wait. Needs server#57 (the SONOS_REQUEST_TIMEOUT_MS knob); older images
+      # ignore the unknown var and fall back to hanging, which is exactly what #57 fixes.
+      SONOS_REQUEST_TIMEOUT_MS: "2000"
       PORT: "8080"
       # Fast sync so a short E2E sees progress written back quickly (server integration tuning).
       POLL_INTERVAL_SECONDS: "2"
