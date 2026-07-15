@@ -26,8 +26,15 @@ die() { echo "seed-abs: ERROR: $*" >&2; exit 1; }
 command -v jq >/dev/null || die "jq is required"
 
 # HTTP helper. Echoes the response body; retries transient 5xx (ABS warm-up); surfaces 4xx.
-# Args: METHOD PATH [JSON_BODY] [BEARER_TOKEN]. Sets global LAST_CODE.
-LAST_CODE=""
+# Args: METHOD PATH [JSON_BODY] [BEARER_TOKEN]. Records the HTTP code via last_code().
+#
+# The code is written to a file, not a shell global: most callers capture the body with
+# `x="$(api …)"`, which runs api() in a subshell, so a global assignment would never reach the
+# parent - a failed login would then die citing the code of the last *bare* api call (the /status
+# probe, 200), an actively misleading diagnostic. A file survives the subshell.
+CODE_FILE="$(mktemp)"
+trap 'rm -f "$CODE_FILE"' EXIT
+last_code() { cat "$CODE_FILE" 2>/dev/null || echo "?"; }
 api() {
   local method="$1" path="$2" body="${3:-}" token="${4:-}" attempt=0 code
   local bodyfile; bodyfile="$(mktemp)"
@@ -40,13 +47,13 @@ api() {
     if { [ "$code" = 000 ] || [ "$code" -ge 500 ]; } && [ "$attempt" -lt 45 ]; then
       sleep 2; continue
     fi
-    LAST_CODE="$code"; cat "$bodyfile"; rm -f "$bodyfile"; return 0
+    printf '%s' "$code" > "$CODE_FILE"; cat "$bodyfile"; rm -f "$bodyfile"; return 0
   done
 }
 
 log "waiting for ABS at $ABS_BASE ..."
 api GET /status >/dev/null
-[ "$LAST_CODE" = 200 ] || die "ABS /status returned $LAST_CODE"
+[ "$(last_code)" = 200 ] || die "ABS /status returned $(last_code)"
 
 log "init root user (idempotent on a fresh instance)"
 api POST /init "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{newRoot:{username:$u,password:$p}}')" >/dev/null || true
@@ -54,12 +61,12 @@ api POST /init "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{newRoot:{us
 log "login as root"
 admin="$(api POST /login "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{username:$u,password:$p}')" \
   | abs_token_from)"
-[ -n "$admin" ] || die "could not obtain an admin token (login code $LAST_CODE)"
+[ -n "$admin" ] || die "could not obtain an admin token (login code $(last_code))"
 
 log "create the Books library over /audiobooks"
 lib="$(api POST /api/libraries '{"name":"Books","folders":[{"fullPath":"/audiobooks"}],"mediaType":"book"}' "$admin" \
   | jq -r '.library.id // .id // empty')"
-[ -n "$lib" ] || die "library creation failed (code $LAST_CODE)"
+[ -n "$lib" ] || die "library creation failed (code $(last_code))"
 
 log "force a scan (auto-scan on create is unreliable)"
 api POST "/api/libraries/$lib/scan" "" "$admin" >/dev/null || true
@@ -73,7 +80,7 @@ for _ in $(seq 1 45); do
   [ -n "$item" ] && [ "${duration:-0}" -gt 0 ] && break
   sleep 2
 done
-[ -n "$item" ] && [ "${duration:-0}" -gt 0 ] || die "fixture item never got a duration (last code $LAST_CODE)"
+[ -n "$item" ] && [ "${duration:-0}" -gt 0 ] || die "fixture item never got a duration (last code $(last_code))"
 log "item=$item duration=${duration}s"
 
 create_user() { # username password -> prints user id
@@ -91,7 +98,7 @@ streamer_id="$(create_user "$STREAMER_USER" "$STREAMER_PASS")"
 [ -n "$streamer_id" ] || die "streamer user not created"
 streamer_key="$(api POST /api/api-keys "$(jq -nc --arg n "ratatoskr-streamer" --arg id "$streamer_id" '{name:$n,userId:$id,isActive:true}')" "$admin" \
   | jq -r '.apiKey.apiKey // empty')"
-[ -n "$streamer_key" ] || die "streamer API key not created (code $LAST_CODE)"
+[ -n "$streamer_key" ] || die "streamer API key not created (code $(last_code))"
 
 log "set an initial listening position of ${RESUME_SECONDS}s for $END_USER"
 end_token="$(api POST /login "$(jq -nc --arg u "$END_USER" --arg p "$END_PASS" '{username:$u,password:$p}')" \
@@ -100,7 +107,7 @@ end_token="$(api POST /login "$(jq -nc --arg u "$END_USER" --arg p "$END_PASS" '
 api PATCH "/api/me/progress/$item" \
   "$(jq -nc --argjson t "$RESUME_SECONDS" --argjson d "$duration" '{currentTime:$t,duration:$d,isFinished:false}')" \
   "$end_token" >/dev/null
-[ "$LAST_CODE" -lt 300 ] || die "setting initial progress failed (code $LAST_CODE)"
+[ "$(last_code)" -lt 300 ] || die "setting initial progress failed (code $(last_code))"
 
 umask 077
 cat > "$ENV_OUT" <<EOF
