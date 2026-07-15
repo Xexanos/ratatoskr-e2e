@@ -1,0 +1,211 @@
+name: E2E
+
+# The cross-component end-to-end suite: the real app APK on an emulator, driven black-box with
+# Maestro, against the real server + Audiobookshelf + fake Sonos (test-concept.md §4/§5).
+#
+# Triggers:
+#   - repository_dispatch (server-image): the server repo fires this after publishing a new
+#     main image (payload: image/tag/digest/sha). Blocking run: server@main x app@last-release.
+#   - workflow_dispatch: manual, with optional pins for debugging.
+#   - pull_request: harness changes, run against the latest published artifacts.
+# On a green server-image run it dispatches `e2e-passed` back so the server promotes the tested
+# digest (server promote.yml).
+
+on:
+  repository_dispatch:
+    # Only server-image is handled today. The app-side `app-validated` dispatch is a fast-follow
+    # (the app has no E2E-gated promote yet); adding it back here without a payload branch in
+    # "Resolve artifact inputs" would fall through to defaults and pull a nonexistent release
+    # :latest. Re-add it together with its resolve branch when the app promote lands.
+    types: [server-image]
+  workflow_dispatch:
+    inputs:
+      server_image:
+        description: "Server image ref, e.g. ghcr.io/xexanos/ratatoskr-server-testing:testing-<sha> or @sha256:… (default: the release :latest, which exists only after the first promotion)"
+        default: ""
+      fake_sonos_image:
+        description: "Fake Sonos image ref (default: :latest; pin a sha-<sha> or @sha256:… to override)"
+        default: ""
+      app_release_tag:
+        description: "App pre-release tag (default: newest testing-*)"
+        default: ""
+  pull_request:
+    paths-ignore: ['**/*.md', 'docs/**', 'LICENSE', '.gitignore']
+
+# server-image dispatches share ONE group so a newer server commit cancels an in-flight older
+# run: otherwise two shas run in parallel and a slower older run can fire e2e-passed *after* the
+# newer one, re-tagging :latest backwards (promote.yml re-tags whatever digest arrives, with no
+# ordering guard). The trade-off - a superseded sha loses its individual verdict - is acceptable
+# for a promotion gate that only cares about the newest image. PR/manual runs keep per-ref groups.
+concurrency:
+  group: >-
+    ${{ (github.event_name == 'repository_dispatch' && github.event.action == 'server-image')
+        && 'e2e-server-image'
+        || format('e2e-{0}', github.head_ref || github.run_id) }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Pin Maestro (the install script honors MAESTRO_VERSION) so a new upstream release or a
+      # get.maestro.mobile.dev outage can't silently change or break the blocking promotion
+      # pipeline. Bump deliberately - keep it in step with the harness. 2.6.1 = the first green run.
+      MAESTRO_VERSION: "2.6.1"
+    permissions:
+      contents: read
+      packages: read      # pull the server + fake-sonos images from GHCR
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve artifact inputs
+        # Dispatch payload and workflow inputs are passed as environment variables and referenced
+        # as shell variables ("$PAYLOAD_IMAGE"), never interpolated into the script text. A
+        # ${{ … }} expansion happens before the shell parses the line, so a payload field holding
+        # `'; rm -rf … ; '` would execute - and this repo's dispatch is reachable by anyone with
+        # the E2E_DISPATCH_TOKEN, with SERVER_PROMOTE_TOKEN in reach downstream. Same hardened
+        # idiom the server repo's container.yml uses.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PAYLOAD_IMAGE: ${{ github.event.client_payload.image }}
+          PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          INPUT_SERVER_IMAGE: ${{ inputs.server_image }}
+          INPUT_FAKE_SONOS_IMAGE: ${{ inputs.fake_sonos_image }}
+          INPUT_APP_RELEASE_TAG: ${{ inputs.app_release_tag }}
+        run: |
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$EVENT_ACTION" = "server-image" ]; then
+            [ -n "$PAYLOAD_IMAGE" ] || { echo "::error::server-image dispatch missing 'image'"; exit 1; }
+            if [ -n "$PAYLOAD_DIGEST" ]; then
+              echo "SERVER_IMAGE=${PAYLOAD_IMAGE}@${PAYLOAD_DIGEST}" >> "$GITHUB_ENV"
+            elif [ -n "$PAYLOAD_TAG" ]; then
+              echo "SERVER_IMAGE=${PAYLOAD_IMAGE}:${PAYLOAD_TAG}" >> "$GITHUB_ENV"
+            else
+              echo "::error::server-image dispatch carried neither digest nor tag"; exit 1
+            fi
+          else
+            [ -n "$INPUT_SERVER_IMAGE" ] && echo "SERVER_IMAGE=$INPUT_SERVER_IMAGE" >> "$GITHUB_ENV" || true
+            [ -n "$INPUT_FAKE_SONOS_IMAGE" ] && echo "FAKE_SONOS_IMAGE=$INPUT_FAKE_SONOS_IMAGE" >> "$GITHUB_ENV" || true
+            [ -n "$INPUT_APP_RELEASE_TAG" ] && echo "APP_RELEASE_TAG=$INPUT_APP_RELEASE_TAG" >> "$GITHUB_ENV" || true
+          fi
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+
+      - name: Cache Maestro
+        id: maestro-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.maestro
+          key: maestro-${{ env.MAESTRO_VERSION }}
+
+      - name: Install Maestro
+        if: steps.maestro-cache.outputs.cache-hit != 'true'
+        run: curl -fsSL "https://get.maestro.mobile.dev" | bash
+
+      - name: Add Maestro to PATH
+        run: echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch pinned artifacts (server + fake-sonos images, app APK)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/fetch-artifacts.sh
+
+      - name: Bring up the stack (ABS + fake-sonos + server, seeded)
+        run: bash scripts/run-e2e.sh up
+
+      - name: Cache the AVD snapshot
+        id: avd-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api36-x86_64-default-pixel_6
+
+      # On a cache miss, boot the emulator once WITHOUT -no-snapshot-save so a quick-boot snapshot
+      # is written into the AVD before the cache action saves it. The real run below then boots
+      # from that snapshot. Without this step the cached AVD never contains a snapshot (the drive
+      # step always passes -no-snapshot-save), so every run cold-boots and the cache saves nothing.
+      - name: Generate the AVD snapshot (cache miss only)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "AVD snapshot generated"
+
+      - name: Drive the app + assert (Maestro + ABS progress)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/run-e2e.sh drive
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          mkdir -p logs
+          # docker compose interpolates image refs from these; source them so `logs` renders the
+          # real container output instead of an "image variable missing" interpolation error.
+          set -a; [ -f .e2e.artifacts.env ] && . .e2e.artifacts.env; [ -f .e2e.env ] && . .e2e.env; set +a
+          docker compose -f compose.e2e.yaml logs --no-color > logs/compose.log 2>&1 || true
+          cp -r ~/.maestro/tests logs/maestro 2>/dev/null || true
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with: { name: e2e-logs, path: logs, retention-days: 14 }
+
+      - name: Tear down
+        if: always()
+        run: bash scripts/run-e2e.sh down
+
+      - name: Promote the tested server image (green server-image run)
+        if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'server-image'
+        env:
+          GH_TOKEN: ${{ secrets.SERVER_PROMOTE_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          # Hard-fail rather than skip: a green E2E that silently never promotes means :latest
+          # quietly stops advancing with nothing anywhere turning red - worse than a loud failure.
+          # (The server repo's trigger-e2e step fails the same way on a missing dispatch token.)
+          if [ -z "$GH_TOKEN" ]; then echo "::error::SERVER_PROMOTE_TOKEN not set; cannot promote the tested image."; exit 1; fi
+          # Forward both digest and tag: container.yml always sends a digest, but a hand-crafted
+          # tag-only dispatch tests fine and must still be promotable - promote.yml falls back to
+          # ${DISPATCH_SOURCE:-$DISPATCH_TAG}, so sending the tag too lets it promote by tag.
+          if [ -z "$PAYLOAD_DIGEST" ] && [ -z "$PAYLOAD_TAG" ]; then
+            echo "::error::server-image payload had neither digest nor tag; nothing to promote."; exit 1
+          fi
+          gh api "repos/$OWNER/ratatoskr-server/dispatches" \
+            -f event_type=e2e-passed \
+            -F "client_payload[digest]=$PAYLOAD_DIGEST" \
+            -F "client_payload[tag]=$PAYLOAD_TAG" \
+            -F client_payload[channels]=latest

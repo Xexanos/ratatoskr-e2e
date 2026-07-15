@@ -1,0 +1,103 @@
+# Ratatoskr E2E - P1 happy-path spine (test-concept.md §5): E2E-01..04 plus E2E-05 play/pause/seek,
+# in one app session. E2E-05 stop is flows/p1-stop.yaml, and E2E-06 (progress synced back to ABS)
+# is asserted out-of-band by scripts/assert-abs-progress.sh - both run after this flow (only ABS
+# proves the position persisted, and stop is kept last so the progress check sees a live session).
+#
+# Driven black-box via Maestro. Selectors: the resource-ids exposed by app#15/app#36
+# (connect_server_url, library_search, library_row, speaker_row, nowplaying_seek) and otherwise
+# the app's English text / contentDescription (the app UI is English-only). These are confirmed
+# against the app APK - the flow runs green end-to-end in CI; the per-step comments below record
+# the selector/navigation quirks that were pinned down along the way.
+appId: io.github.xexanos.ratatoskr
+env:
+  SERVER_URL: "https://localhost:8080"
+  ABS_USER: "e2e"
+  ABS_PASS: "e2e-listener-pw1"
+  BOOK_TITLE: "Test Book"
+  SPEAKER_NAME: "E2E Test Room"
+---
+# ---------- E2E-01: connect to the server + trust-on-first-use ----------
+- launchApp:
+    clearState: true          # fresh install semantics: start on the Connect screen
+- assertVisible: "Connect"
+# Target the field by its test tag (app#36), not the "Server URL" label: tapping the label
+# landed the cursor mid-prefill so erase+type mangled the URL. The id taps the field centre
+# (past the short "https://" prefill) so eraseText clears it fully.
+- tapOn:
+    id: "connect_server_url"
+- eraseText
+- inputText: "${SERVER_URL}"
+- assertVisible: "${SERVER_URL}"   # guard: the field holds exactly the URL before we connect
+- hideKeyboard
+- tapOn: "Connect"
+- assertVisible: "Trust and continue"   # the certificate confirmation card (TOFU)
+# E2E-01 is TOFU "confirm the fingerprint": the card must display the server cert's real SHA-256
+# fingerprint (lowercase, colon-separated - the app's format), extracted host-side in run-e2e.sh
+# `up` and passed as CERT_FP. Asserting it means an app that showed a wrong or empty fingerprint
+# would fail here instead of the flow rubber-stamping trust.
+- assertVisible: "${CERT_FP}"
+- tapOn: "Trust and continue"
+
+# ---------- E2E-02: sign in with ABS credentials ----------
+- assertVisible: "Sign in"
+- tapOn: "Username"            # empty, uniquely-labelled field -> reliable text handle
+- inputText: "${ABS_USER}"
+- tapOn: "Password"
+- inputText: "${ABS_PASS}"
+- hideKeyboard
+- tapOn: "Sign in"
+- assertVisible:
+    id: "library_search"       # landed on the library -> signed in
+
+# ---------- E2E-02 (cont.): session survives an app restart ----------
+- stopApp
+- launchApp                    # no clearState: trusted server + tokens must persist
+- assertVisible:
+    id: "library_search"       # straight to the library, not Connect/SignIn
+
+# ---------- E2E-03: browse + search ----------
+- assertVisible: "${BOOK_TITLE}"        # the book shows in the full (unfiltered) library
+- tapOn:
+    id: "library_search"
+# A non-matching term must FILTER OUT the only book. Without this, the assertion below is vacuous:
+# a one-book library shows its single row whether or not the filter ever ran, so a completely
+# broken search would pass. The disappearance is the real proof the query is applied.
+- inputText: "zzzz-no-such-book"
+- assertNotVisible:
+    id: "library_row"
+- eraseText
+# The real title brings the matching row back.
+- inputText: "${BOOK_TITLE}"
+- assertVisible:
+    id: "library_row"
+- assertVisible: "${BOOK_TITLE}"
+# ONE hideKeyboard, while the keyboard is definitely up (right after typing). Calling it again
+# when the keyboard is already down registers as Back and, on the root Library screen, exits the
+# app to the launcher — that's what failed a previous run. The filtered list keeps the matching
+# row, so E2E-04 taps it directly (no need to clear the search).
+- hideKeyboard
+
+# ---------- E2E-04: start the book on a speaker (resumes from the seeded position) ----------
+# A library-row tap goes straight to the speaker picker (no item-detail screen); tapping a
+# speaker IS the start action (startSession) and auto-navigates to Now-playing.
+- tapOn:
+    id: "library_row"
+    index: 0                   # the fixture book row
+- assertVisible: "Choose a speaker"   # arrived on the speaker picker
+- tapOn:
+    id: "speaker_row"
+    index: 0                   # the fake speaker ("${SPEAKER_NAME}") — this tap starts playback
+# ---------- E2E-05: now-playing controls (play / pause / seek; stop is flows/p1-stop.yaml) ----------
+- assertVisible: "Pause"       # waits for Now-playing + PLAYING (contentDescription "Pause")
+- tapOn: "Pause"
+- assertVisible: "Play"        # toggled to paused
+- tapOn: "Play"
+- assertVisible: "Pause"       # playing again
+# Seek by tapping the slider at its midpoint (REL_TIME seek - the operation SPEC §4/§5 singles out
+# as fragile). ~50% of the 300s fixture is ~150s, comfortably inside (resume 120s .. duration 300s).
+- tapOn:
+    id: "nowplaying_seek"
+    point: "50%,50%"
+- assertVisible: "Pause"       # still playing right after the seek
+# Leave it PLAYING: assert-abs-progress.sh confirms ABS keeps receiving the advancing position,
+# then flows/p1-stop.yaml issues Stop.
