@@ -28,8 +28,16 @@ on:
   pull_request:
     paths-ignore: ['**/*.md', 'docs/**', 'LICENSE', '.gitignore']
 
+# server-image dispatches share ONE group so a newer server commit cancels an in-flight older
+# run: otherwise two shas run in parallel and a slower older run can fire e2e-passed *after* the
+# newer one, re-tagging :latest backwards (promote.yml re-tags whatever digest arrives, with no
+# ordering guard). The trade-off - a superseded sha loses its individual verdict - is acceptable
+# for a promotion gate that only cares about the newest image. PR/manual runs keep per-ref groups.
 concurrency:
-  group: e2e-${{ github.event.client_payload.sha || github.head_ref || github.run_id }}
+  group: >-
+    ${{ (github.event_name == 'repository_dispatch' && github.event.action == 'server-image')
+        && 'e2e-server-image'
+        || format('e2e-{0}', github.head_ref || github.run_id) }}
   cancel-in-progress: true
 
 jobs:
