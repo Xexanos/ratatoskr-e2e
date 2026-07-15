@@ -16,7 +16,12 @@ COMPOSE=(docker compose -f compose.e2e.yaml)
 ENV_FILE="$root/.e2e.env"
 ARTIFACTS_ENV="$root/.e2e.artifacts.env"
 
-load_artifacts() { [ -f "$ARTIFACTS_ENV" ] && { set -a; . "$ARTIFACTS_ENV"; set +a; }; }
+# Source a dotenv file if it exists, exporting its vars. Returns 0 when the file is absent, so a
+# bare call under `set -e` does not abort the script - the header promises image refs may come
+# "from the environment" instead of a fetch-artifacts run, and the `:?` guards below are what
+# should catch a truly missing value.
+source_env() { [ -f "$1" ] || return 0; set -a; . "$1"; set +a; }
+load_artifacts() { source_env "$ARTIFACTS_ENV"; }
 
 wait_http() { # url [insecure] - poll until HTTP <400
   local url="$1" insecure="${2:-}" i
@@ -53,7 +58,7 @@ cmd_up() {
 
 cmd_drive() {
   load_artifacts
-  [ -f "$ENV_FILE" ] && { set -a; . "$ENV_FILE"; set +a; }
+  source_env "$ENV_FILE"
   : "${APP_APK:?APP_APK not set (run fetch-artifacts.sh)}"
   command -v adb >/dev/null || { echo "run-e2e: adb not found (need a running emulator)" >&2; exit 1; }
   command -v maestro >/dev/null || { echo "run-e2e: maestro not found" >&2; exit 1; }
@@ -78,6 +83,9 @@ case "${1:-all}" in
   up) cmd_up ;;
   drive) cmd_drive ;;
   down) cmd_down ;;
-  all) cmd_up; cmd_drive; cmd_down ;;
+  # Tear down on exit (success or failure) so a failed local `all` run never leaves the stack up
+  # with host ports 8080/13378 bound, colliding with the next attempt. (CI runs up/drive/down as
+  # separate steps and relies on the workflow's if: always() teardown instead.)
+  all) trap cmd_down EXIT; cmd_up; cmd_drive ;;
   *) echo "usage: run-e2e.sh {up|drive|down|all}" >&2; exit 2 ;;
 esac
