@@ -22,9 +22,14 @@ env:
 - launchApp:
     clearState: true          # fresh install semantics: start on the Connect screen
 - assertVisible: "Connect"
-- tapOn: "Server URL"          # CONFIRM: the only editable field on Connect (no testTag)
+# Target the field by its test tag (app#36), not the "Server URL" label: tapping the label
+# landed the cursor mid-prefill so erase+type mangled the URL. The id taps the field centre
+# (past the short "https://" prefill) so eraseText clears it fully.
+- tapOn:
+    id: "connect_server_url"
 - eraseText
 - inputText: "${SERVER_URL}"
+- assertVisible: "${SERVER_URL}"   # guard: the field holds exactly the URL before we connect
 - hideKeyboard
 - tapOn: "Connect"
 - assertVisible: "Trust and continue"   # the certificate confirmation card (TOFU)
