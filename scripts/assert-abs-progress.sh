@@ -7,16 +7,17 @@
 # position once (say, in the pause handler) would satisfy (a) but not (b). Config: <repo>/.e2e.env.
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+here="$(cd "$(dirname "$0")" && pwd)"
+root="$(cd "$here/.." && pwd)"
 ABS_BASE="${ABS_BASE:-http://localhost:13378}"
+# shellcheck source=scripts/lib/abs.sh
+. "$here/lib/abs.sh"
 # shellcheck disable=SC1090
 . "${1:-$root/.e2e.env}"
 
 command -v jq >/dev/null || { echo "assert-abs-progress: jq required" >&2; exit 1; }
 
-token="$(curl -sS -H 'x-return-tokens: true' -H 'Content-Type: application/json' \
-  --data "$(jq -nc --arg u "$E2E_ABS_USER" --arg p "$E2E_ABS_PASS" '{username:$u,password:$p}')" \
-  "$ABS_BASE/login" | jq -r '.user.token // .user.accessToken // .accessToken // empty')"
+token="$(abs_login "$ABS_BASE" "$E2E_ABS_USER" "$E2E_ABS_PASS")"
 [ -n "$token" ] || { echo "assert-abs-progress: could not log in as $E2E_ABS_USER" >&2; exit 1; }
 
 # Read ABS currentTime, floored to whole seconds. Guarded end to end: curl has no -f, so a 5xx

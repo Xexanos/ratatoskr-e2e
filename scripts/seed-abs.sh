@@ -9,8 +9,12 @@
 #   ABS_STREAMER_API_KEY  E2E_ABS_USER  E2E_ABS_PASS  E2E_ITEM_ID  E2E_RESUME_SECONDS  E2E_BOOK_DURATION
 set -euo pipefail
 
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/lib/abs.sh
+. "$here/lib/abs.sh"
+
 ABS_BASE="${ABS_BASE:-http://localhost:13378}"
-ENV_OUT="${1:-$(cd "$(dirname "$0")/.." && pwd)/.e2e.env}"
+ENV_OUT="${1:-$(cd "$here/.." && pwd)/.e2e.env}"
 
 ROOT_USER="root";     ROOT_PASS="rootpassword"
 END_USER="${E2E_ABS_USER:-e2e}";           END_PASS="${E2E_ABS_PASS:-e2e-listener-pw1}"
@@ -49,7 +53,7 @@ api POST /init "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{newRoot:{us
 
 log "login as root"
 admin="$(api POST /login "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{username:$u,password:$p}')" \
-  | jq -r '.user.token // .user.accessToken // .accessToken // empty')"
+  | abs_token_from)"
 [ -n "$admin" ] || die "could not obtain an admin token (login code $LAST_CODE)"
 
 log "create the Books library over /audiobooks"
@@ -91,7 +95,7 @@ streamer_key="$(api POST /api/api-keys "$(jq -nc --arg n "ratatoskr-streamer" --
 
 log "set an initial listening position of ${RESUME_SECONDS}s for $END_USER"
 end_token="$(api POST /login "$(jq -nc --arg u "$END_USER" --arg p "$END_PASS" '{username:$u,password:$p}')" \
-  | jq -r '.user.token // .user.accessToken // .accessToken // empty')"
+  | abs_token_from)"
 [ -n "$end_token" ] || die "could not log in as the end user"
 api PATCH "/api/me/progress/$item" \
   "$(jq -nc --argjson t "$RESUME_SECONDS" --argjson d "$duration" '{currentTime:$t,duration:$d,isFinished:false}')" \
