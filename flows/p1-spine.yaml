@@ -1,6 +1,7 @@
-# Ratatoskr E2E - P1 happy-path spine (test-concept.md §5, E2E-01..05), one app session.
-# E2E-06 (progress synced back to ABS) is asserted out-of-band by scripts/assert-abs-progress.sh
-# after this flow, since only ABS is proof the position persisted.
+# Ratatoskr E2E - P1 happy-path spine (test-concept.md §5): E2E-01..04 plus E2E-05 play/pause/seek,
+# in one app session. E2E-05 stop is flows/p1-stop.yaml, and E2E-06 (progress synced back to ABS)
+# is asserted out-of-band by scripts/assert-abs-progress.sh - both run after this flow (only ABS
+# proves the position persisted, and stop is kept last so the progress check sees a live session).
 #
 # Driven black-box via Maestro. Selectors: the resource-ids exposed by app#15/app#36
 # (connect_server_url, library_search, library_row, speaker_row, nowplaying_seek) and otherwise
@@ -86,10 +87,17 @@ env:
 - tapOn:
     id: "speaker_row"
     index: 0                   # the fake speaker ("${SPEAKER_NAME}") — this tap starts playback
-# ---------- E2E-05: now-playing controls ----------
+# ---------- E2E-05: now-playing controls (play / pause / seek; stop is flows/p1-stop.yaml) ----------
 - assertVisible: "Pause"       # waits for Now-playing + PLAYING (contentDescription "Pause")
 - tapOn: "Pause"
 - assertVisible: "Play"        # toggled to paused
 - tapOn: "Play"
 - assertVisible: "Pause"       # playing again
-# leave it playing; assert-abs-progress.sh then verifies ABS received the advanced position.
+# Seek by tapping the slider at its midpoint (REL_TIME seek - the operation SPEC §4/§5 singles out
+# as fragile). ~50% of the 300s fixture is ~150s, comfortably inside (resume 120s .. duration 300s).
+- tapOn:
+    id: "nowplaying_seek"
+    point: "50%,50%"
+- assertVisible: "Pause"       # still playing right after the seek
+# Leave it PLAYING: assert-abs-progress.sh confirms ABS keeps receiving the advancing position,
+# then flows/p1-stop.yaml issues Stop.

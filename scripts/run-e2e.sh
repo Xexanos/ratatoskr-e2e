@@ -86,6 +86,9 @@ cmd_drive() {
 
   echo "run-e2e: asserting ABS progress (E2E-06)"
   bash "$root/scripts/assert-abs-progress.sh" "$ENV_FILE"
+
+  echo "run-e2e: stopping playback (E2E-05 stop)"
+  maestro test "$root/flows/p1-stop.yaml"
 }
 
 cmd_down() { "${COMPOSE[@]}" down -v || true; }

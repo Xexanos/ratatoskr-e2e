@@ -1,0 +1,10 @@
+# Ratatoskr E2E - E2E-05 stop (test-concept.md §5). Runs after p1-spine.yaml and the ABS progress
+# check, so that check sees a live, still-playing session first; this flow then ends it.
+# No clearState/stopApp: the spine left the app on Now-playing and its process is still alive, so
+# launchApp just resumes that screen (a cold start would route to the library instead).
+appId: io.github.xexanos.ratatoskr
+---
+- launchApp
+- assertVisible: "Stop"        # still on Now-playing with an active session
+- tapOn: "Stop"
+- assertNotVisible: "Stop"     # Stop ended the session and navigated away from Now-playing
