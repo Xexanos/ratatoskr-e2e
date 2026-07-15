@@ -50,14 +50,24 @@ env:
     id: "library_search"       # straight to the library, not Connect/SignIn
 
 # ---------- E2E-03: browse + search ----------
-- assertVisible: "${BOOK_TITLE}"        # the book shows in the full library
+- assertVisible: "${BOOK_TITLE}"        # the book shows in the full (unfiltered) library
 - tapOn:
     id: "library_search"
+# A non-matching term must FILTER OUT the only book. Without this, the assertion below is vacuous:
+# a one-book library shows its single row whether or not the filter ever ran, so a completely
+# broken search would pass. The disappearance is the real proof the query is applied.
+- inputText: "zzzz-no-such-book"
+- assertNotVisible:
+    id: "library_row"
+- eraseText
+# The real title brings the matching row back.
 - inputText: "${BOOK_TITLE}"
-- assertVisible: "${BOOK_TITLE}"        # still shown, now filtered to the search match
+- assertVisible:
+    id: "library_row"
+- assertVisible: "${BOOK_TITLE}"
 # ONE hideKeyboard, while the keyboard is definitely up (right after typing). Calling it again
 # when the keyboard is already down registers as Back and, on the root Library screen, exits the
-# app to the launcher — that's what failed the previous run. The filtered list keeps the matching
+# app to the launcher — that's what failed a previous run. The filtered list keeps the matching
 # row, so E2E-04 taps it directly (no need to clear the search).
 - hideKeyboard
 
