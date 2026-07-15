@@ -37,6 +37,11 @@ services:
       # Advance RelTime with the wall clock while PLAYING, so a real session's position moves and
       # the server syncs it back to ABS (E2E-06). Test-only; the fake defaults to a static position.
       FAKE_ADVANCE: "1"
+    ports:
+      # Published so the harness can query the fake's AVTransport state over SOAP directly
+      # (assert-fake-transport.sh, E2E-05 stop). The server still reaches it over the bridge as
+      # fake-sonos:1400 - this only adds host access.
+      - "1400:1400"
 
   ratatoskr:
     image: ${SERVER_IMAGE:?set SERVER_IMAGE (ghcr.io/xexanos/ratatoskr-server@sha256:<digest>)}

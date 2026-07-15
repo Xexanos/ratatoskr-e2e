@@ -89,6 +89,9 @@ cmd_drive() {
 
   echo "run-e2e: stopping playback (E2E-05 stop)"
   maestro test "$root/flows/p1-stop.yaml"
+
+  echo "run-e2e: asserting the fake speaker actually stopped (E2E-05)"
+  bash "$root/scripts/assert-fake-transport.sh" STOPPED
 }
 
 cmd_down() { "${COMPOSE[@]}" down -v || true; }
