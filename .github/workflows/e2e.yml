@@ -160,12 +160,20 @@ jobs:
           GH_TOKEN: ${{ secrets.SERVER_PROMOTE_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
         run: |
           # Hard-fail rather than skip: a green E2E that silently never promotes means :latest
           # quietly stops advancing with nothing anywhere turning red - worse than a loud failure.
           # (The server repo's trigger-e2e step fails the same way on a missing dispatch token.)
           if [ -z "$GH_TOKEN" ]; then echo "::error::SERVER_PROMOTE_TOKEN not set; cannot promote the tested image."; exit 1; fi
+          # Forward both digest and tag: container.yml always sends a digest, but a hand-crafted
+          # tag-only dispatch tests fine and must still be promotable - promote.yml falls back to
+          # ${DISPATCH_SOURCE:-$DISPATCH_TAG}, so sending the tag too lets it promote by tag.
+          if [ -z "$PAYLOAD_DIGEST" ] && [ -z "$PAYLOAD_TAG" ]; then
+            echo "::error::server-image payload had neither digest nor tag; nothing to promote."; exit 1
+          fi
           gh api "repos/$OWNER/ratatoskr-server/dispatches" \
             -f event_type=e2e-passed \
             -F "client_payload[digest]=$PAYLOAD_DIGEST" \
+            -F "client_payload[tag]=$PAYLOAD_TAG" \
             -F client_payload[channels]=latest
