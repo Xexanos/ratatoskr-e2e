@@ -37,9 +37,9 @@ env:
 
 # ---------- E2E-02: sign in with ABS credentials ----------
 - assertVisible: "Sign in"
-- tapOn: "Username"            # CONFIRM: field label
+- tapOn: "Username"            # empty, uniquely-labelled field -> reliable text handle
 - inputText: "${ABS_USER}"
-- tapOn: "Password"            # CONFIRM: field label
+- tapOn: "Password"
 - inputText: "${ABS_PASS}"
 - hideKeyboard
 - tapOn: "Sign in"
@@ -63,15 +63,17 @@ env:
 - hideKeyboard
 
 # ---------- E2E-04: start the book on a speaker (resumes from the seeded position) ----------
+# A library-row tap goes straight to the speaker picker (no item-detail screen); tapping a
+# speaker IS the start action (startSession) and auto-navigates to Now-playing.
 - tapOn:
     id: "library_row"
     index: 0                   # the fixture book row
-# CONFIRM: navigation from the item to picking a speaker and starting playback.
+- assertVisible: "Choose a speaker"   # arrived on the speaker picker
 - tapOn:
     id: "speaker_row"
-    index: 0                   # the fake speaker ("${SPEAKER_NAME}")
+    index: 0                   # the fake speaker ("${SPEAKER_NAME}") — this tap starts playback
 # ---------- E2E-05: now-playing controls ----------
-- assertVisible: "Pause"       # contentDescription is "Pause" while PLAYING (resumed + playing)
+- assertVisible: "Pause"       # waits for Now-playing + PLAYING (contentDescription "Pause")
 - tapOn: "Pause"
 - assertVisible: "Play"        # toggled to paused
 - tapOn: "Play"
