@@ -98,6 +98,48 @@ cmd_drive() {
 
   echo "run-e2e: asserting the fake speaker actually stopped (E2E-05)"
   bash "$root/scripts/assert-fake-transport.sh" STOPPED
+
+  cmd_p2
+}
+
+# ---- P2 failure cases (test-concept.md §5, E2E-07..10) ----
+#
+# Ordering is deliberate:
+#   E2E-08 first - it must wait until the app's token is provably expired, and it leaves the app
+#     with a FRESH token, which E2E-10 depends on (with ABS down, a 401's refresh would also fail
+#     and surface "Sign-in expired." instead of the upstream error we want to see).
+#   E2E-10 next (ABS down/up) - no active session, so the only moving part is the library query.
+#   E2E-09 next (speaker down/up) - starts and loses a session; recovery ends session-less.
+#   E2E-07 last - sign-out ends the signed-in state everything else depends on.
+cmd_p2() {
+  # E2E-08: the app must hold an access token OLDER than ACCESS_TOKEN_EXPIRY (90s in the
+  # compose). The last possible rotation hand-over was the session stop just above (a pending
+  # rotated pair is delivered on the stop response), so TTL + margin from here guarantees expiry.
+  echo "run-e2e: E2E-08 - waiting 100s for the app's access token to expire"
+  sleep 100
+  echo "run-e2e: E2E-08 - cold start on an expired token must refresh silently"
+  maestro test "$root/flows/p2-refresh.yaml" -e BOOK_TITLE="Test Book"
+
+  echo "run-e2e: E2E-10 - stopping ABS (unreachable mid-run)"
+  "${COMPOSE[@]}" stop abs
+  maestro test "$root/flows/p2-abs-down.yaml"
+
+  echo "run-e2e: E2E-10 - restarting ABS and waiting for it"
+  "${COMPOSE[@]}" start abs
+  wait_http "http://localhost:13378/status"
+  maestro test "$root/flows/p2-abs-recovered.yaml" -e BOOK_TITLE="Test Book"
+
+  echo "run-e2e: E2E-09 - starting a session to kill"
+  maestro test "$root/flows/p2-session-start.yaml"
+  echo "run-e2e: E2E-09 - stopping the fake speaker mid-session"
+  "${COMPOSE[@]}" stop fake-sonos
+  maestro test "$root/flows/p2-speaker-lost.yaml"
+  echo "run-e2e: E2E-09 - restarting the fake speaker (comes back empty -> relinquish)"
+  "${COMPOSE[@]}" start fake-sonos
+  maestro test "$root/flows/p2-session-relinquished.yaml"
+
+  echo "run-e2e: E2E-07 - signing out"
+  maestro test "$root/flows/p2-signout.yaml"
 }
 
 cmd_down() { "${COMPOSE[@]}" down -v || true; }

@@ -1,0 +1,13 @@
+# Ratatoskr E2E - E2E-07: sign out (test-concept.md §5). Runs LAST: it ends the signed-in state
+# every other scenario depends on. Settings is reached from the library top bar (icon located by
+# its contentDescription); "Sign out" has no confirmation dialog and lands on the sign-in screen
+# with the back stack cleared.
+appId: io.github.xexanos.ratatoskr
+---
+- launchApp
+- assertVisible:
+    id: "library_search"       # on the library, signed in
+- tapOn: "Settings"            # top-bar icon (contentDescription)
+- assertVisible: "Sign out"
+- tapOn: "Sign out"
+- assertVisible: "Sign in to Audiobookshelf"   # back on sign-in; sign-out complete

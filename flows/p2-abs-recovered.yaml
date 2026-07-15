@@ -1,0 +1,11 @@
+# Ratatoskr E2E - E2E-10 (recovery): ABS is back (the harness restarted it and waited for
+# /status). Clearing the probe query re-issues the full-library request, which must succeed
+# again - proving the error state was transient, not sticky.
+appId: io.github.xexanos.ratatoskr
+---
+- tapOn:
+    id: "library_search"
+- eraseText
+- extendedWaitUntil:
+    visible: "${BOOK_TITLE}"
+    timeout: 15000
