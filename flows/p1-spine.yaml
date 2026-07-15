@@ -2,14 +2,11 @@
 # E2E-06 (progress synced back to ABS) is asserted out-of-band by scripts/assert-abs-progress.sh
 # after this flow, since only ABS is proof the position persisted.
 #
-# Driven black-box via Maestro. Selectors: the four resource-ids exposed by app#15
-# (library_search, library_row, speaker_row, nowplaying_seek) and otherwise the app's English
-# text / contentDescription (the app UI is English-only).
-#
-# NOTE (first-run tuning): the server-URL field and the Library->Speaker->Now-Playing tap
-# sequence have no test tags; the selectors below are best-effort and must be confirmed on the
-# first CI run (maestro studio / the recorded hierarchy). Anything marked CONFIRM may need an
-# adjusted selector - or a small testTag added to the app as a follow-up.
+# Driven black-box via Maestro. Selectors: the resource-ids exposed by app#15/app#36
+# (connect_server_url, library_search, library_row, speaker_row, nowplaying_seek) and otherwise
+# the app's English text / contentDescription (the app UI is English-only). These are confirmed
+# against the app APK - the flow runs green end-to-end in CI; the per-step comments below record
+# the selector/navigation quirks that were pinned down along the way.
 appId: io.github.xexanos.ratatoskr
 env:
   SERVER_URL: "https://localhost:8080"
