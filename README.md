@@ -45,8 +45,8 @@ to the [test concept](./test-concept.md) here.
 
 ## Setup
 
-Prerequisites: Docker + docker-compose, `gh` (authenticated), `jq`, `ffmpeg` (to
-generate the fixture audiobook), and — for driving the app — a running **Android
+Prerequisites: Docker + docker-compose, `gh` (authenticated), `jq`, `python3` (to
+generate the fixture audiobook WAV), and — for driving the app — a running **Android
 emulator** (API 36) with `adb`, plus the [Maestro](https://maestro.mobile.dev) CLI.
 
 ## Running tests locally
