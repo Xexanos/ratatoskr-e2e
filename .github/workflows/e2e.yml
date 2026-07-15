@@ -13,7 +13,11 @@ name: E2E
 
 on:
   repository_dispatch:
-    types: [server-image, app-validated]
+    # Only server-image is handled today. The app-side `app-validated` dispatch is a fast-follow
+    # (the app has no E2E-gated promote yet); adding it back here without a payload branch in
+    # "Resolve artifact inputs" would fall through to defaults and pull a nonexistent release
+    # :latest. Re-add it together with its resolve branch when the app promote lands.
+    types: [server-image]
   workflow_dispatch:
     inputs:
       server_image:
