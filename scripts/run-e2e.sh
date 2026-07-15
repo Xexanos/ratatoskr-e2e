@@ -53,6 +53,16 @@ cmd_up() {
   echo "run-e2e: starting the server"
   "${COMPOSE[@]}" up -d ratatoskr
   wait_http "https://localhost:8080/v1/health" insecure
+
+  # Record the server cert's SHA-256 fingerprint for the TOFU assertion (E2E-01). The entrypoint
+  # generates a fresh self-signed cert per run, so it must be read at runtime. Format it exactly
+  # as the app shows it - lowercase, colon-separated - so the Maestro assertVisible matches.
+  echo "run-e2e: recording the server certificate fingerprint (E2E-01)"
+  cert_fp="$(printf '' | openssl s_client -connect localhost:8080 -servername localhost 2>/dev/null \
+    | openssl x509 -noout -fingerprint -sha256 2>/dev/null | sed 's/^.*=//' | tr 'A-F' 'a-f')"
+  [ -n "$cert_fp" ] || { echo "run-e2e: failed to read the server certificate fingerprint" >&2; exit 1; }
+  echo "E2E_CERT_FP=$cert_fp" >> "$ENV_FILE"
+
   echo "run-e2e: stack is up (server healthy)"
 }
 
@@ -71,7 +81,8 @@ cmd_drive() {
   maestro test "$root/flows/p1-spine.yaml" \
     -e SERVER_URL="https://localhost:8080" \
     -e ABS_USER="$E2E_ABS_USER" -e ABS_PASS="$E2E_ABS_PASS" \
-    -e BOOK_TITLE="Test Book" -e SPEAKER_NAME="E2E Test Room"
+    -e BOOK_TITLE="Test Book" -e SPEAKER_NAME="E2E Test Room" \
+    -e CERT_FP="$E2E_CERT_FP"
 
   echo "run-e2e: asserting ABS progress (E2E-06)"
   bash "$root/scripts/assert-abs-progress.sh" "$ENV_FILE"

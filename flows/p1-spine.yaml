@@ -30,6 +30,11 @@ env:
 - hideKeyboard
 - tapOn: "Connect"
 - assertVisible: "Trust and continue"   # the certificate confirmation card (TOFU)
+# E2E-01 is TOFU "confirm the fingerprint": the card must display the server cert's real SHA-256
+# fingerprint (lowercase, colon-separated - the app's format), extracted host-side in run-e2e.sh
+# `up` and passed as CERT_FP. Asserting it means an app that showed a wrong or empty fingerprint
+# would fail here instead of the flow rubber-stamping trust.
+- assertVisible: "${CERT_FP}"
 - tapOn: "Trust and continue"
 
 # ---------- E2E-02: sign in with ABS credentials ----------
