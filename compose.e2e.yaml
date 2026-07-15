@@ -4,9 +4,10 @@
 # Ratatoskr server. The Android app is NOT here - it runs on an emulator and reaches the server
 # via `adb reverse` (see scripts/run-e2e.sh).
 #
-# Image refs are injected by the harness so every input is pinned by digest/sha
-# (test-concept.md §6): SERVER_IMAGE and FAKE_SONOS_IMAGE come from the server repo's publish
-# (via the repository_dispatch payload); ABS_IMAGE defaults to a pinned digest here.
+# Image refs are injected by the harness (test-concept.md §6). SERVER_IMAGE is pinned by digest
+# (from the server-image dispatch payload), and ABS_IMAGE defaults to a pinned digest here.
+# FAKE_SONOS_IMAGE tracks the fake's own :latest by default - it is published on its own cadence,
+# not per server commit - unless a digest is pinned (see scripts/fetch-artifacts.sh).
 #
 # Start order matters: the server validates ABS_STREAMER_API_KEY against ABS at startup, so ABS
 # must be seeded before the server starts. run-e2e.sh therefore brings up `abs` + `fake-sonos`
