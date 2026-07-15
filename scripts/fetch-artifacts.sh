@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Resolves and fetches the three pinned inputs for a run and records them in .e2e.artifacts.env:
 #   - server image   (SERVER_IMAGE)      pinned by digest; from the server-image dispatch payload
-#   - fake Sonos image (FAKE_SONOS_IMAGE) derived from the same commit sha (sha-<sha> tag)
+#   - fake Sonos image (FAKE_SONOS_IMAGE) the fake's own :latest (or a pinned digest) - it is
+#                                         published on its own cadence, not per server commit
 #   - app APK         (APP_APK)           downloaded from the app's latest testing-* pre-release
 #
 # Inputs via env (CI sets these from the repository_dispatch payload; sensible defaults for a
-# manual run): SERVER_IMAGE, SERVER_SHA, FAKE_SONOS_IMAGE, APP_RELEASE_TAG.
+# manual run): SERVER_IMAGE, FAKE_SONOS_IMAGE, APP_RELEASE_TAG.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,14 +17,12 @@ out="$root/.e2e.artifacts.env"
 
 SERVER_IMAGE="${SERVER_IMAGE:-ghcr.io/$owner/ratatoskr-server:latest}"
 
-# Match the fake Sonos to the exact server commit when we know it (no drift); else use latest.
-if [ -z "${FAKE_SONOS_IMAGE:-}" ]; then
-  if [ -n "${SERVER_SHA:-}" ]; then
-    FAKE_SONOS_IMAGE="ghcr.io/$owner/ratatoskr-fake-sonos:sha-${SERVER_SHA}"
-  else
-    FAKE_SONOS_IMAGE="ghcr.io/$owner/ratatoskr-fake-sonos:latest"
-  fi
-fi
+# The fake Sonos is a slowly-changing test dependency published on its OWN cadence (the server's
+# fake-sonos.yml, path-filtered) as :latest + sha-<its-own-sha> - NOT per server commit, so there
+# is no fake tag matching a given server sha. Track :latest by default; for fully reproducible
+# runs, pin a digest (FAKE_SONOS_IMAGE=ghcr.io/<owner>/ratatoskr-fake-sonos@sha256:...) and bump it
+# deliberately when the fake changes (test-concept.md §6).
+FAKE_SONOS_IMAGE="${FAKE_SONOS_IMAGE:-ghcr.io/$owner/ratatoskr-fake-sonos:latest}"
 
 echo "fetch-artifacts: pulling $SERVER_IMAGE"
 docker pull "$SERVER_IMAGE"
