@@ -1,0 +1,23 @@
+# Dependabot configuration.
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Keep the GitHub Actions in e2e.yml up to date. The actions are pinned to full commit SHAs
+  # (tag-hijack hardening after the March 2026 trivy-action compromise, GHSA-69fq-xp46-6x23);
+  # Dependabot reads the trailing "# vX.Y.Z" comment and bumps the SHA pins from there —
+  # without this config the pins would silently go stale.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # 7-day cooldown before proposing a new release: compromised releases (like the malicious
+    # trivy v0.69.4) are typically discovered and pulled within days — don't be the early adopter.
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "ci"
