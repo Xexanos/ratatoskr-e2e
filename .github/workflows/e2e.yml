@@ -5,19 +5,19 @@ name: E2E
 #
 # Triggers:
 #   - repository_dispatch (server-image): the server repo fires this after publishing a new
-#     main image (payload: image/tag/digest/sha). Blocking run: server@main x app@last-release.
+#     main image (payload: image/tag/digest/sha). Blocking run: server@digest x app@last-release.
+#   - repository_dispatch (app-validated): the app repo fires this after publishing a per-commit
+#     testing-<sha> pre-release (payload: release_tag/commit). Run: app@that build x server@release
+#     :latest (the shipping server).
 #   - workflow_dispatch: manual, with optional pins for debugging.
 #   - pull_request: harness changes, run against the latest published artifacts.
 # On a green server-image run it dispatches `e2e-passed` back so the server promotes the tested
-# digest (server promote.yml).
+# digest (server promote.yml); on a green app-validated run it dispatches `app-e2e-passed` back so
+# the app cuts its release tag (app promote.yml).
 
 on:
   repository_dispatch:
-    # Only server-image is handled today. The app-side `app-validated` dispatch is a fast-follow
-    # (the app has no E2E-gated promote yet); adding it back here without a payload branch in
-    # "Resolve artifact inputs" would fall through to defaults and pull a nonexistent release
-    # :latest. Re-add it together with its resolve branch when the app promote lands.
-    types: [server-image]
+    types: [server-image, app-validated]
   workflow_dispatch:
     inputs:
       server_image:
@@ -72,6 +72,7 @@ jobs:
           PAYLOAD_IMAGE: ${{ github.event.client_payload.image }}
           PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
           PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          PAYLOAD_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
           INPUT_SERVER_IMAGE: ${{ inputs.server_image }}
           INPUT_FAKE_SONOS_IMAGE: ${{ inputs.fake_sonos_image }}
           INPUT_APP_RELEASE_TAG: ${{ inputs.app_release_tag }}
@@ -85,6 +86,13 @@ jobs:
             else
               echo "::error::server-image dispatch carried neither digest nor tag"; exit 1
             fi
+          elif [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$EVENT_ACTION" = "app-validated" ]; then
+            # App build under test: pin the APK to the exact testing-<sha> pre-release the app just
+            # published. SERVER_IMAGE is left unset so fetch-artifacts.sh defaults it to the release
+            # :latest - the shipping server the new app should be validated against (mirror of a
+            # server-image run using app@last-release).
+            [ -n "$PAYLOAD_RELEASE_TAG" ] || { echo "::error::app-validated dispatch missing 'release_tag'"; exit 1; }
+            echo "APP_RELEASE_TAG=$PAYLOAD_RELEASE_TAG" >> "$GITHUB_ENV"
           else
             [ -n "$INPUT_SERVER_IMAGE" ] && echo "SERVER_IMAGE=$INPUT_SERVER_IMAGE" >> "$GITHUB_ENV" || true
             [ -n "$INPUT_FAKE_SONOS_IMAGE" ] && echo "FAKE_SONOS_IMAGE=$INPUT_FAKE_SONOS_IMAGE" >> "$GITHUB_ENV" || true
