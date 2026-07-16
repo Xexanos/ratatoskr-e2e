@@ -72,16 +72,28 @@ log "force a scan (auto-scan on create is unreliable)"
 api POST "/api/libraries/$lib/scan" "" "$admin" >/dev/null || true
 
 log "wait for the fixture item to appear with a real duration"
-item=""; duration=""
+item=""; duration=""; title=""
 for _ in $(seq 1 45); do
   items="$(api GET "/api/libraries/$lib/items" "" "$admin")"
   item="$(printf '%s' "$items" | jq -r '.results[0].id // empty')"
   duration="$(printf '%s' "$items" | jq -r '(.results[0].media.duration // 0) | floor')"
+  # The title ABS parsed for the fixture (from the folder name in make-fixture.sh). Emitting it as
+  # E2E_BOOK_TITLE lets the flows assert on the ACTUAL displayed title via one channel instead of
+  # "Test Book" hardcoded at every maestro call site.
+  title="$(printf '%s' "$items" | jq -r '.results[0].media.metadata.title // empty')"
   [ -n "$item" ] && [ "${duration:-0}" -gt 0 ] && break
   sleep 2
 done
 [ -n "$item" ] && [ "${duration:-0}" -gt 0 ] || die "fixture item never got a duration (last code $(last_code))"
-log "item=$item duration=${duration}s"
+[ -n "$title" ] || title="Test Book"   # fall back to the fixture folder name if ABS reported none
+log "item=$item title=\"$title\" duration=${duration}s"
+
+# The compose runs ABS with a short ACCESS_TOKEN_EXPIRY (E2E-08), and the scan poll above is the
+# one step that can outlive it - re-login so everything below never runs on an expired admin token.
+log "re-login as root (short ACCESS_TOKEN_EXPIRY; the scan poll may have outlived the first token)"
+admin="$(api POST /login "$(jq -nc --arg u "$ROOT_USER" --arg p "$ROOT_PASS" '{username:$u,password:$p}')" \
+  | abs_token_from)"
+[ -n "$admin" ] || die "root re-login failed (code $(last_code))"
 
 create_user() { # username password -> prints user id
   local u="$1" p="$2"
@@ -115,6 +127,7 @@ ABS_STREAMER_API_KEY=$streamer_key
 E2E_ABS_USER=$END_USER
 E2E_ABS_PASS=$END_PASS
 E2E_ITEM_ID=$item
+E2E_BOOK_TITLE="$title"
 E2E_RESUME_SECONDS=$RESUME_SECONDS
 E2E_BOOK_DURATION=$duration
 EOF

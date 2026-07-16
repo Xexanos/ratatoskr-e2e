@@ -1,0 +1,17 @@
+# Ratatoskr E2E - shared: start the fixture book on the fake speaker and arrive on Now-playing
+# PLAYING. Used via runFlow by both p1-spine (E2E-04) and p2-session-start (E2E-09 setup) so the
+# start-session selector chain (library_row -> speaker picker -> speaker_row -> Now-playing) lives
+# in ONE place - when a selector changes in the app (as app#36 did for the URL field), it is
+# updated here rather than in every caller. Assumes the caller is on the library screen.
+appId: io.github.xexanos.ratatoskr
+---
+- assertVisible:
+    id: "library_row"
+- tapOn:
+    id: "library_row"
+    index: 0                   # the fixture book row
+- assertVisible: "Choose a speaker"   # a library-row tap goes straight to the speaker picker
+- tapOn:
+    id: "speaker_row"
+    index: 0                   # the fake speaker - this tap IS the start action (startSession)
+- assertVisible: "Pause"       # auto-navigated to Now-playing, PLAYING (contentDescription "Pause")

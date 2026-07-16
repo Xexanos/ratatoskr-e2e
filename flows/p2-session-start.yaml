@@ -1,0 +1,8 @@
+# Ratatoskr E2E - E2E-09 (setup): start the book on the fake speaker again so there is a live
+# session to kill. Reuses the shared start-session subflow (same chain as the P1 spine's E2E-04),
+# so the selectors stay in one place. A stale access token is fine here - ABS is up, so a 401
+# silently refreshes.
+appId: io.github.xexanos.ratatoskr
+---
+- launchApp                    # cold start routes to the library (signed in)
+- runFlow: subflows/start-session.yaml

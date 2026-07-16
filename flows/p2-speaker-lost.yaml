@@ -1,0 +1,11 @@
+# Ratatoskr E2E - E2E-09: the speaker disappeared mid-session (the harness stopped the fake's
+# container). GET /v1/sessions/current deliberately propagates a dead speaker as a 502
+# {upstream_error, "Sonos is unavailable"}, and the app's 5s Now-playing poll must surface that
+# message WITHOUT dropping the session card - the session is still active server-side (the sync
+# loop skips failed reads and retries; it never tears a session down just because a read failed).
+appId: io.github.xexanos.ratatoskr
+---
+- extendedWaitUntil:
+    visible: "Sonos is unavailable"
+    timeout: 20000             # one 5s app poll + a server round-trip, with margin
+- assertVisible: "NOW PLAYING" # the session card is still shown alongside the error

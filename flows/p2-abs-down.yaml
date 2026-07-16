@@ -1,0 +1,18 @@
+# Ratatoskr E2E - E2E-10: ABS unreachable -> sensible error surfaced (test-concept.md §5).
+#
+# The harness stopped the ABS container just before this flow. Runs attached: p2-refresh left the
+# app on the library with a freshly refreshed token, so the request below fails on ABS being down
+# (server 502 upstream_error), NOT on an expired token whose refresh would also fail while ABS is
+# down and surface "Sign-in expired." instead. Typing a query forces a new library request; the
+# server maps the ABS failure to 502 {upstream_error} and the app must show its message as plain
+# error text - no crash, no spinner.
+appId: io.github.xexanos.ratatoskr
+---
+- assertVisible:
+    id: "library_search"
+- tapOn:
+    id: "library_search"
+- inputText: "zzzz-abs-down-probe"
+- extendedWaitUntil:
+    visible: "Audiobookshelf is unavailable"
+    timeout: 15000             # 300ms debounce + request timeout headroom

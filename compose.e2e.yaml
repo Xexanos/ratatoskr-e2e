@@ -19,6 +19,27 @@ services:
     image: ${ABS_IMAGE:-ghcr.io/advplyr/audiobookshelf@sha256:1eef6716183c52abafe5405e7d6be8390248ecd59c7488c44af871757ac8fc4d}
     environment:
       PORT: "13378"
+      # Shortened access-token TTL (seconds; ABS TokenManager env) so E2E-08 can force a real
+      # expiry instead of leaving token rotation dormant behind the 1h default. It stays inside the
+      # server's LISTENING_TOKEN_REFRESH_MARGIN (300s), so mid-session the server rotates the
+      # listening tokens and hands them to the app via Session.rotatedTokens (E2E-08's "active
+      # session continues"); E2E-08 proper then cold-starts p2-refresh on a guaranteed-expired
+      # token to prove the silent 401 -> /v1/auth/refresh path.
+      #
+      # WHY 180, not shorter: this TTL is global to the whole P2 run, and E2E-09 holds the
+      # Now-playing screen for ~60s where the app deliberately SUPPRESSES silent refresh (the
+      # server owns rotation during an active session). While E2E-09's speaker is dead the session
+      # responses are errors that carry no rotatedTokens, so the app's token is not renewed and
+      # must simply outlive the scenario — from E2E-08's refresh through E2E-09's relinquish is
+      # ~110s (measured), so a 90s TTL lapsed mid-E2E-09 and surfaced "Sign-in expired" instead of
+      # the relinquish. 180 covers the whole chain with margin; E2E-08's wait (run-e2e.sh) is set
+      # just above it to still force expiry, and run-e2e also guards E2E-09 with a re-refresh if a
+      # slow ABS restart ate the budget. seed-abs.sh re-logs-in after its slowest step so seeding
+      # never trips over the TTL.
+      #
+      # Single-sourced with run-e2e.sh: it exports E2E_ACCESS_TOKEN_EXPIRY (default 180) and derives
+      # E2E-08's wait from the same value, so the TTL and the wait cannot drift apart across files.
+      ACCESS_TOKEN_EXPIRY: "${E2E_ACCESS_TOKEN_EXPIRY:-180}"
     ports:
       # Published so the harness (curl) can seed and assert ABS state from the host.
       - "13378:13378"
@@ -51,9 +72,20 @@ services:
       ABS_ALLOW_PLAIN_HTTP: "true"
       # Set by run-e2e.sh after seeding (the stream-only account's API key).
       ABS_STREAMER_API_KEY: ${ABS_STREAMER_API_KEY:?seed ABS first; run-e2e.sh sets this}
+      # Short ABS request timeout so E2E-10 (ABS stopped mid-run) surfaces the server's 502
+      # "Audiobookshelf is unavailable" well under the app's ~10s read timeout - otherwise the app
+      # could time out first and show a generic network error instead. Needs server#72 (the
+      # ABS_REQUEST_TIMEOUT_MS knob); older images ignore the unknown var (ABS still 502s via the
+      # server's default 10s, which passes today only because Docker fast-fails the stopped host).
+      ABS_REQUEST_TIMEOUT_MS: "3000"
       # Point the server straight at the fake over unicast - no SSDP multicast on a bridge.
       SONOS_SEED_HOST: fake-sonos:1400
       SONOS_DISABLE_EVENTS: "1"
+      # Short Sonos SOAP timeout so E2E-09 (speaker disappears -> the container is stopped, which
+      # drops packets rather than refusing) surfaces "Sonos is unavailable" quickly, well inside
+      # p2-speaker-lost's wait. Needs server#57 (the SONOS_REQUEST_TIMEOUT_MS knob); older images
+      # ignore the unknown var and fall back to hanging, which is exactly what #57 fixes.
+      SONOS_REQUEST_TIMEOUT_MS: "2000"
       PORT: "8080"
       # Fast sync so a short E2E sees progress written back quickly (server integration tuning).
       POLL_INTERVAL_SECONDS: "2"

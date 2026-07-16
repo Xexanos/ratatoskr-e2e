@@ -1,0 +1,10 @@
+# Ratatoskr E2E - E2E-09 (recovery): the fake is back but came up empty (fresh in-memory state,
+# no queue). The server's next sync tick sees a TrackURI that is not our queue and relinquishes
+# the session rather than recording foreign/cleared state as book progress; the app's next poll
+# then gets 404 no_active_session and clears to the empty Now-playing state. This asserts the
+# whole recovery chain: speaker back -> relinquish -> session gone -> clean UI, no stuck error.
+appId: io.github.xexanos.ratatoskr
+---
+- extendedWaitUntil:
+    visible: "Nothing is playing right now."
+    timeout: 30000             # server tick (2s) + app poll (5s), with generous margin

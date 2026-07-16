@@ -1,0 +1,15 @@
+# Ratatoskr E2E - E2E-10 (recovery): ABS is back (run-e2e restarted it and waited for /status). A
+# cold start must now reload the library from ABS - proving the earlier error state was transient,
+# not sticky.
+#
+# We use launchApp (cold start) rather than recovering the search field in place: relying on IME
+# focus + cursor position surviving a separate maestro invocation and the up-to-~2min ABS-restart
+# idle proved fragile. The cold-start library load is an equally strong recovery proof - it can
+# only succeed if ABS is reachable again (and, if the token lapsed while ABS was down, it silently
+# refreshes now that ABS answers).
+appId: io.github.xexanos.ratatoskr
+---
+- launchApp                    # cold start routes to the library (signed in)
+- assertVisible:
+    id: "library_search"
+- assertVisible: "${BOOK_TITLE}"   # the list loaded from ABS again -> recovered

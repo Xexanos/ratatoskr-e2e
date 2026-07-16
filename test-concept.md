@@ -115,16 +115,16 @@ real-hardware verification — see §2).
 
 | ID | Scenario | Prio | Coverage | Status |
 |---|---|---|---|---|
-| E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Automated | Planned |
-| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Automated | Planned |
-| E2E-03 | Browse + search the library | P1 | Automated | Planned |
-| E2E-04 | Start a book on a speaker → resumes from stored position | P1 | control/state automated · audio manual | Planned |
-| E2E-05 | Now-playing: play / pause / seek / stop | P1 | control/state automated · audio manual | Planned |
-| E2E-06 | Progress synced back to ABS (source of truth) | P1 | Automated + ABS-state assertion | Planned |
-| E2E-07 | Sign out | P2 | Automated | Planned |
-| E2E-08 | 401 → silent token refresh; active session continues | P2 | Automated | Planned |
-| E2E-09 | Speaker disappears mid-session | P2 | Automated | Planned |
-| E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Automated | Planned |
+| E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Automated | Done (`flows/p1-spine.yaml`) |
+| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Automated | Done (`flows/p1-spine.yaml`) |
+| E2E-03 | Browse + search the library | P1 | Automated | Done (`flows/p1-spine.yaml`) |
+| E2E-04 | Start a book on a speaker → resumes from stored position | P1 | control/state automated · audio manual | Done (`flows/p1-spine.yaml`) |
+| E2E-05 | Now-playing: play / pause / seek / stop | P1 | control/state automated · audio manual | Done (`p1-spine`/`p1-pause`/`p1-stop` + fake transport-state asserts) |
+| E2E-06 | Progress synced back to ABS (source of truth) | P1 | Automated + ABS-state assertion | Done (`scripts/assert-abs-progress.sh`) |
+| E2E-07 | Sign out | P2 | Automated | Done (`flows/p2-signout.yaml`) |
+| E2E-08 | 401 → silent token refresh; active session continues | P2 | Automated | Done (`flows/p2-refresh.yaml` + short-TTL rotation through the P1 session) |
+| E2E-09 | Speaker disappears mid-session | P2 | Automated | Done (`flows/p2-speaker-lost.yaml` + relinquish recovery) |
+| E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Automated | Done (`flows/p2-abs-down.yaml` + recovery) |
 
 **Setup requirements implied by these scenarios:**
 

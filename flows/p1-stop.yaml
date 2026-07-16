@@ -1,8 +1,10 @@
-# Ratatoskr E2E - E2E-05 stop (test-concept.md §5). Runs after p1-spine.yaml and the ABS progress
-# check, which leave the app FOREGROUND on Now-playing with a live session. This flow deliberately
-# does NOT launchApp: Maestro's launchApp force-stops and relaunches by default, and a cold start
-# routes to the library (decideStartDestination), losing Now-playing. Attaching to the running
-# foreground screen instead keeps us on Now-playing, where Stop is present.
+# Ratatoskr E2E - E2E-05 stop (test-concept.md §5). Runs after p1-spine.yaml, the ABS progress
+# check, p1-pause.yaml, and p1-resume.yaml, which leave the app FOREGROUND on Now-playing with a
+# live PLAYING session - so Stop is exercised from PLAYING (pause-from-playing is covered by
+# p1-pause). This flow deliberately does NOT launchApp: Maestro's launchApp force-stops and
+# relaunches by default, and a cold start routes to the library (decideStartDestination), losing
+# Now-playing. Attaching to the running foreground screen instead keeps us on Now-playing, where
+# Stop is present.
 appId: io.github.xexanos.ratatoskr
 ---
 - assertVisible: "Stop"        # still on Now-playing with an active session

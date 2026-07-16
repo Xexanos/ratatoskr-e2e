@@ -1,0 +1,8 @@
+# Ratatoskr E2E - E2E-05 resume. Runs after p1-pause + the PAUSED_PLAYBACK host assert, so that
+# p1-stop then exercises Stop from PLAYING (not only from the paused state). Attaches to the
+# foreground Now-playing screen (no launchApp - see p1-stop.yaml for why).
+appId: io.github.xexanos.ratatoskr
+---
+- assertVisible: "Play"        # currently paused (p1-pause left it here)
+- tapOn: "Play"
+- assertVisible: "Pause"       # UI toggled back to PLAYING
