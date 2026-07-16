@@ -112,11 +112,12 @@ cmd_drive() {
 #   E2E-09 next (speaker down/up) - starts and loses a session; recovery ends session-less.
 #   E2E-07 last - sign-out ends the signed-in state everything else depends on.
 cmd_p2() {
-  # E2E-08: the app must hold an access token OLDER than ACCESS_TOKEN_EXPIRY (90s in the
+  # E2E-08: the app must hold an access token OLDER than ACCESS_TOKEN_EXPIRY (180s in the
   # compose). The last possible rotation hand-over was the session stop just above (a pending
-  # rotated pair is delivered on the stop response), so TTL + margin from here guarantees expiry.
-  echo "run-e2e: E2E-08 - waiting 100s for the app's access token to expire"
-  sleep 100
+  # rotated pair is delivered on the stop response), so waiting just past the TTL from here
+  # guarantees expiry. Kept a touch above 180 so a slightly-fresh token still lapses.
+  echo "run-e2e: E2E-08 - waiting 190s for the app's access token to expire"
+  sleep 190
   echo "run-e2e: E2E-08 - cold start on an expired token must refresh silently"
   maestro test "$root/flows/p2-refresh.yaml" -e BOOK_TITLE="Test Book"
 
