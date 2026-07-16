@@ -72,6 +72,12 @@ services:
       ABS_ALLOW_PLAIN_HTTP: "true"
       # Set by run-e2e.sh after seeding (the stream-only account's API key).
       ABS_STREAMER_API_KEY: ${ABS_STREAMER_API_KEY:?seed ABS first; run-e2e.sh sets this}
+      # Short ABS request timeout so E2E-10 (ABS stopped mid-run) surfaces the server's 502
+      # "Audiobookshelf is unavailable" well under the app's ~10s read timeout - otherwise the app
+      # could time out first and show a generic network error instead. Needs server#72 (the
+      # ABS_REQUEST_TIMEOUT_MS knob); older images ignore the unknown var (ABS still 502s via the
+      # server's default 10s, which passes today only because Docker fast-fails the stopped host).
+      ABS_REQUEST_TIMEOUT_MS: "3000"
       # Point the server straight at the fake over unicast - no SSDP multicast on a bridge.
       SONOS_SEED_HOST: fake-sonos:1400
       SONOS_DISABLE_EVENTS: "1"
