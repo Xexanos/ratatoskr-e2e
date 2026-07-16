@@ -4,20 +4,20 @@ name: E2E
 # Maestro, against the real server + Audiobookshelf + fake Sonos (test-concept.md §4/§5).
 #
 # Triggers:
-#   - repository_dispatch (server-image): the server repo fires this after publishing a new
-#     main image (payload: image/tag/digest/sha). Blocking run: server@main x app@last-release.
+#   - repository_dispatch (server-candidate): the server repo fires this after publishing a new
+#     main image (payload: image/tag/digest/sha). Blocking run: server@digest x app@last-release.
+#   - repository_dispatch (app-candidate): the app repo fires this after publishing a per-commit
+#     testing-<sha> pre-release (payload: release_tag/commit). Run: app@that build x server@release
+#     :latest (the shipping server).
 #   - workflow_dispatch: manual, with optional pins for debugging.
 #   - pull_request: harness changes, run against the latest published artifacts.
-# On a green server-image run it dispatches `e2e-passed` back so the server promotes the tested
-# digest (server promote.yml).
+# On a green server-candidate run it dispatches `server-e2e-passed` back so the server promotes the tested
+# digest (server promote.yml); on a green app-candidate run it dispatches `app-e2e-passed` back so
+# the app cuts its release tag (app promote.yml).
 
 on:
   repository_dispatch:
-    # Only server-image is handled today. The app-side `app-validated` dispatch is a fast-follow
-    # (the app has no E2E-gated promote yet); adding it back here without a payload branch in
-    # "Resolve artifact inputs" would fall through to defaults and pull a nonexistent release
-    # :latest. Re-add it together with its resolve branch when the app promote lands.
-    types: [server-image]
+    types: [server-candidate, app-candidate]
   workflow_dispatch:
     inputs:
       server_image:
@@ -32,15 +32,16 @@ on:
   pull_request:
     paths-ignore: ['**/*.md', 'docs/**', 'LICENSE', '.gitignore']
 
-# server-image dispatches share ONE group so a newer server commit cancels an in-flight older
-# run: otherwise two shas run in parallel and a slower older run can fire e2e-passed *after* the
-# newer one, re-tagging :latest backwards (promote.yml re-tags whatever digest arrives, with no
-# ordering guard). The trade-off - a superseded sha loses its individual verdict - is acceptable
-# for a promotion gate that only cares about the newest image. PR/manual runs keep per-ref groups.
+# Each dispatch kind that gates a promotion shares ONE group so a newer producer commit cancels an
+# in-flight older run: otherwise two runs proceed in parallel and a slower older one can fire its
+# *-passed callback after the newer one, promoting backwards (the producer's promote re-tags/tags
+# whatever arrives, with no ordering guard). The trade-off - a superseded commit loses its
+# individual verdict - is fine for a gate that only cares about the newest build. PR/manual runs
+# keep per-ref groups.
 concurrency:
   group: >-
-    ${{ (github.event_name == 'repository_dispatch' && github.event.action == 'server-image')
-        && 'e2e-server-image'
+    ${{ (github.event_name == 'repository_dispatch' && github.event.action == 'server-candidate') && 'e2e-server-candidate'
+        || (github.event_name == 'repository_dispatch' && github.event.action == 'app-candidate') && 'e2e-app-candidate'
         || format('e2e-{0}', github.head_ref || github.run_id) }}
   cancel-in-progress: true
 
@@ -72,19 +73,27 @@ jobs:
           PAYLOAD_IMAGE: ${{ github.event.client_payload.image }}
           PAYLOAD_DIGEST: ${{ github.event.client_payload.digest }}
           PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          PAYLOAD_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
           INPUT_SERVER_IMAGE: ${{ inputs.server_image }}
           INPUT_FAKE_SONOS_IMAGE: ${{ inputs.fake_sonos_image }}
           INPUT_APP_RELEASE_TAG: ${{ inputs.app_release_tag }}
         run: |
-          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$EVENT_ACTION" = "server-image" ]; then
-            [ -n "$PAYLOAD_IMAGE" ] || { echo "::error::server-image dispatch missing 'image'"; exit 1; }
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$EVENT_ACTION" = "server-candidate" ]; then
+            [ -n "$PAYLOAD_IMAGE" ] || { echo "::error::server-candidate dispatch missing 'image'"; exit 1; }
             if [ -n "$PAYLOAD_DIGEST" ]; then
               echo "SERVER_IMAGE=${PAYLOAD_IMAGE}@${PAYLOAD_DIGEST}" >> "$GITHUB_ENV"
             elif [ -n "$PAYLOAD_TAG" ]; then
               echo "SERVER_IMAGE=${PAYLOAD_IMAGE}:${PAYLOAD_TAG}" >> "$GITHUB_ENV"
             else
-              echo "::error::server-image dispatch carried neither digest nor tag"; exit 1
+              echo "::error::server-candidate dispatch carried neither digest nor tag"; exit 1
             fi
+          elif [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$EVENT_ACTION" = "app-candidate" ]; then
+            # App build under test: pin the APK to the exact testing-<sha> pre-release the app just
+            # published. SERVER_IMAGE is left unset so fetch-artifacts.sh defaults it to the release
+            # :latest - the shipping server the new app should be validated against (mirror of a
+            # server-candidate run using app@last-release).
+            [ -n "$PAYLOAD_RELEASE_TAG" ] || { echo "::error::app-candidate dispatch missing 'release_tag'"; exit 1; }
+            echo "APP_RELEASE_TAG=$PAYLOAD_RELEASE_TAG" >> "$GITHUB_ENV"
           else
             [ -n "$INPUT_SERVER_IMAGE" ] && echo "SERVER_IMAGE=$INPUT_SERVER_IMAGE" >> "$GITHUB_ENV" || true
             [ -n "$INPUT_FAKE_SONOS_IMAGE" ] && echo "FAKE_SONOS_IMAGE=$INPUT_FAKE_SONOS_IMAGE" >> "$GITHUB_ENV" || true
@@ -186,8 +195,8 @@ jobs:
         if: always()
         run: bash scripts/run-e2e.sh down
 
-      - name: Promote the tested server image (green server-image run)
-        if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'server-image'
+      - name: Promote the tested server image (green server-candidate run)
+        if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'server-candidate'
         env:
           GH_TOKEN: ${{ secrets.SERVER_PROMOTE_TOKEN }}
           OWNER: ${{ github.repository_owner }}
@@ -202,10 +211,31 @@ jobs:
           # tag-only dispatch tests fine and must still be promotable - promote.yml falls back to
           # ${DISPATCH_SOURCE:-$DISPATCH_TAG}, so sending the tag too lets it promote by tag.
           if [ -z "$PAYLOAD_DIGEST" ] && [ -z "$PAYLOAD_TAG" ]; then
-            echo "::error::server-image payload had neither digest nor tag; nothing to promote."; exit 1
+            echo "::error::server-candidate payload had neither digest nor tag; nothing to promote."; exit 1
           fi
           gh api "repos/$OWNER/ratatoskr-server/dispatches" \
-            -f event_type=e2e-passed \
+            -f event_type=server-e2e-passed \
             -F "client_payload[digest]=$PAYLOAD_DIGEST" \
             -F "client_payload[tag]=$PAYLOAD_TAG" \
             -F client_payload[channels]=latest
+
+      - name: Promote the validated app build (green app-candidate run)
+        if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'app-candidate'
+        env:
+          GH_TOKEN: ${{ secrets.APP_PROMOTE_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PAYLOAD_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          PAYLOAD_COMMIT: ${{ github.event.client_payload.commit }}
+        run: |
+          # Hard-fail rather than skip (same stance as the server promote above): a green app E2E
+          # that silently never dispatches back would leave the app build validated but never
+          # tagged/released, with nothing anywhere turning red.
+          if [ -z "$GH_TOKEN" ]; then echo "::error::APP_PROMOTE_TOKEN not set; cannot promote the validated app build."; exit 1; fi
+          if [ -z "$PAYLOAD_RELEASE_TAG" ]; then echo "::error::app-candidate payload had no release_tag; nothing to promote."; exit 1; fi
+          # The app's promote.yml cuts a v<versionName> tag + release from this tested testing-<sha>
+          # pre-release (no rebuild - an APK can't be re-tagged like an image), so it needs the
+          # release tag and the validated commit.
+          gh api "repos/$OWNER/ratatoskr-app/dispatches" \
+            -f event_type=app-e2e-passed \
+            -F "client_payload[release_tag]=$PAYLOAD_RELEASE_TAG" \
+            -F "client_payload[commit]=$PAYLOAD_COMMIT"
