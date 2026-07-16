@@ -10,6 +10,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # 7-day cooldown before proposing a new release: compromised releases (like the malicious
+    # trivy v0.69.4) are typically discovered and pulled within days — don't be the early adopter.
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         update-types:
