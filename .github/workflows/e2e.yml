@@ -32,15 +32,16 @@ on:
   pull_request:
     paths-ignore: ['**/*.md', 'docs/**', 'LICENSE', '.gitignore']
 
-# server-image dispatches share ONE group so a newer server commit cancels an in-flight older
-# run: otherwise two shas run in parallel and a slower older run can fire e2e-passed *after* the
-# newer one, re-tagging :latest backwards (promote.yml re-tags whatever digest arrives, with no
-# ordering guard). The trade-off - a superseded sha loses its individual verdict - is acceptable
-# for a promotion gate that only cares about the newest image. PR/manual runs keep per-ref groups.
+# Each dispatch kind that gates a promotion shares ONE group so a newer producer commit cancels an
+# in-flight older run: otherwise two runs proceed in parallel and a slower older one can fire its
+# *-passed callback after the newer one, promoting backwards (the producer's promote re-tags/tags
+# whatever arrives, with no ordering guard). The trade-off - a superseded commit loses its
+# individual verdict - is fine for a gate that only cares about the newest build. PR/manual runs
+# keep per-ref groups.
 concurrency:
   group: >-
-    ${{ (github.event_name == 'repository_dispatch' && github.event.action == 'server-image')
-        && 'e2e-server-image'
+    ${{ (github.event_name == 'repository_dispatch' && github.event.action == 'server-image') && 'e2e-server-image'
+        || (github.event_name == 'repository_dispatch' && github.event.action == 'app-validated') && 'e2e-app-validated'
         || format('e2e-{0}', github.head_ref || github.run_id) }}
   cancel-in-progress: true
 
