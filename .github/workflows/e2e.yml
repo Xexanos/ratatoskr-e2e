@@ -218,3 +218,24 @@ jobs:
             -F "client_payload[digest]=$PAYLOAD_DIGEST" \
             -F "client_payload[tag]=$PAYLOAD_TAG" \
             -F client_payload[channels]=latest
+
+      - name: Promote the validated app build (green app-validated run)
+        if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'app-validated'
+        env:
+          GH_TOKEN: ${{ secrets.APP_PROMOTE_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PAYLOAD_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          PAYLOAD_COMMIT: ${{ github.event.client_payload.commit }}
+        run: |
+          # Hard-fail rather than skip (same stance as the server promote above): a green app E2E
+          # that silently never dispatches back would leave the app build validated but never
+          # tagged/released, with nothing anywhere turning red.
+          if [ -z "$GH_TOKEN" ]; then echo "::error::APP_PROMOTE_TOKEN not set; cannot promote the validated app build."; exit 1; fi
+          if [ -z "$PAYLOAD_RELEASE_TAG" ]; then echo "::error::app-validated payload had no release_tag; nothing to promote."; exit 1; fi
+          # The app's promote.yml cuts a v<versionName> tag + release from this tested testing-<sha>
+          # pre-release (no rebuild - an APK can't be re-tagged like an image), so it needs the
+          # release tag and the validated commit.
+          gh api "repos/$OWNER/ratatoskr-app/dispatches" \
+            -f event_type=app-e2e-passed \
+            -F "client_payload[release_tag]=$PAYLOAD_RELEASE_TAG" \
+            -F "client_payload[commit]=$PAYLOAD_COMMIT"
