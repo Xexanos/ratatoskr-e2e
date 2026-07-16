@@ -1,6 +1,7 @@
 # Ratatoskr E2E - E2E-05 pause (test-concept.md §5). Runs attached (no launchApp - see
 # p1-stop.yaml for why) after assert-abs-progress.sh, which needs the session still PLAYING;
-# this flow then pauses it, and p1-stop.yaml stops it from the paused state.
+# this flow pauses it (verified on the speaker by assert-fake-transport.sh PAUSED_PLAYBACK), then
+# p1-resume.yaml plays again so p1-stop.yaml exercises Stop from PLAYING.
 #
 # The taps below only prove the UI toggled. The real check is host-side right after this flow:
 # assert-fake-transport.sh PAUSED_PLAYBACK asks the fake over SOAP whether the Pause actually

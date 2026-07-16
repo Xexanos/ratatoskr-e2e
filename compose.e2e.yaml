@@ -33,9 +33,13 @@ services:
       # must simply outlive the scenario — from E2E-08's refresh through E2E-09's relinquish is
       # ~110s (measured), so a 90s TTL lapsed mid-E2E-09 and surfaced "Sign-in expired" instead of
       # the relinquish. 180 covers the whole chain with margin; E2E-08's wait (run-e2e.sh) is set
-      # just above it to still force expiry. seed-abs.sh re-logs-in after its slowest step so
-      # seeding never trips over the TTL.
-      ACCESS_TOKEN_EXPIRY: "180"
+      # just above it to still force expiry, and run-e2e also guards E2E-09 with a re-refresh if a
+      # slow ABS restart ate the budget. seed-abs.sh re-logs-in after its slowest step so seeding
+      # never trips over the TTL.
+      #
+      # Single-sourced with run-e2e.sh: it exports E2E_ACCESS_TOKEN_EXPIRY (default 180) and derives
+      # E2E-08's wait from the same value, so the TTL and the wait cannot drift apart across files.
+      ACCESS_TOKEN_EXPIRY: "${E2E_ACCESS_TOKEN_EXPIRY:-180}"
     ports:
       # Published so the harness (curl) can seed and assert ABS state from the host.
       - "13378:13378"

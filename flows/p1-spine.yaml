@@ -78,17 +78,11 @@ env:
 - hideKeyboard
 
 # ---------- E2E-04: start the book on a speaker (resumes from the seeded position) ----------
-# A library-row tap goes straight to the speaker picker (no item-detail screen); tapping a
-# speaker IS the start action (startSession) and auto-navigates to Now-playing.
-- tapOn:
-    id: "library_row"
-    index: 0                   # the fixture book row
-- assertVisible: "Choose a speaker"   # arrived on the speaker picker
-- tapOn:
-    id: "speaker_row"
-    index: 0                   # the fake speaker ("${SPEAKER_NAME}") — this tap starts playback
+# Shared start-session chain (library row -> speaker picker -> Now-playing PLAYING), also used by
+# p2-session-start; the selector/navigation notes live in the subflow.
+- runFlow: subflows/start-session.yaml
 # ---------- E2E-05: now-playing controls (play / pause / seek; stop is flows/p1-stop.yaml) ----------
-- assertVisible: "Pause"       # waits for Now-playing + PLAYING (contentDescription "Pause")
+# start-session already asserted "Pause" (Now-playing, PLAYING); drive the controls from there.
 - tapOn: "Pause"
 - assertVisible: "Play"        # toggled to paused
 - tapOn: "Play"

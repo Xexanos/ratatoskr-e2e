@@ -1,13 +1,14 @@
 # Ratatoskr E2E - E2E-08: 401 -> silent token refresh (test-concept.md §5).
 #
 # run-e2e.sh guarantees the app's stored access token is expired before this flow runs: ABS mints
-# 90s tokens (compose ACCESS_TOKEN_EXPIRY) and more than that has passed since the last possible
+# short-lived tokens (the ACCESS_TOKEN_EXPIRY set in compose.e2e.yaml, single-sourced from
+# run-e2e's E2E_ACCESS_TOKEN_EXPIRY) and run-e2e waits past that TTL since the last possible
 # rotation hand-over (the session stop). The cold start below reloads the library, which 401s at
 # ABS; the app's TokenRefreshAuthenticator must silently POST /v1/auth/refresh and retry - with
 # no user-visible effect. A broken refresh path surfaces "Sign-in expired. Please sign in again."
 # instead of the book list.
 #
-# The "active session continues" half of E2E-08 is exercised implicitly by the P1 spine: the 90s
+# The "active session continues" half of E2E-08 is exercised implicitly by the P1 spine: the short
 # TTL expires mid-session, and the session survives only because the server rotates the listening
 # tokens (SPEC §8) and the app adopts them from Session.rotatedTokens.
 appId: io.github.xexanos.ratatoskr

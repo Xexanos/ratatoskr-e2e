@@ -1,16 +1,8 @@
 # Ratatoskr E2E - E2E-09 (setup): start the book on the fake speaker again so there is a live
-# session to kill. Same navigation as the P1 spine (library row -> speaker picker -> Now-playing);
-# a stale access token is fine here - ABS is up, so a 401 silently refreshes.
+# session to kill. Reuses the shared start-session subflow (same chain as the P1 spine's E2E-04),
+# so the selectors stay in one place. A stale access token is fine here - ABS is up, so a 401
+# silently refreshes.
 appId: io.github.xexanos.ratatoskr
 ---
 - launchApp                    # cold start routes to the library (signed in)
-- assertVisible:
-    id: "library_row"
-- tapOn:
-    id: "library_row"
-    index: 0
-- assertVisible: "Choose a speaker"
-- tapOn:
-    id: "speaker_row"
-    index: 0                   # the fake speaker - this tap starts playback
-- assertVisible: "Pause"       # Now-playing, PLAYING
+- runFlow: subflows/start-session.yaml

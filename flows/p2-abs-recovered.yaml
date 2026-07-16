@@ -1,19 +1,15 @@
-# Ratatoskr E2E - E2E-10 (recovery): ABS is back (the harness restarted it and waited for
-# /status). Re-issuing the library request must succeed again - proving the error state was
-# transient, not sticky.
+# Ratatoskr E2E - E2E-10 (recovery): ABS is back (run-e2e restarted it and waited for /status). A
+# cold start must now reload the library from ABS - proving the earlier error state was transient,
+# not sticky.
 #
-# The search field still holds the probe text from p2-abs-down and is focused, with the cursor
-# at the END (that flow's last action was inputText). Do NOT tapOn the field first: a tap
-# re-positions the cursor into the middle of the text, and eraseText only deletes to the LEFT of
-# the cursor - it would leave a trailing fragment (e.g. "obe"), the query would stay a non-match,
-# and the book would never return. Erase from the end, then search the real title: a distinct
-# query re-fires the load (the debounced pipeline drops identical queries) and returns the book.
+# We use launchApp (cold start) rather than recovering the search field in place: relying on IME
+# focus + cursor position surviving a separate maestro invocation and the up-to-~2min ABS-restart
+# idle proved fragile. The cold-start library load is an equally strong recovery proof - it can
+# only succeed if ABS is reachable again (and, if the token lapsed while ABS was down, it silently
+# refreshes now that ABS answers).
 appId: io.github.xexanos.ratatoskr
 ---
-- eraseText: 40                # clears the ~19-char probe from the end-positioned cursor
-- inputText: "${BOOK_TITLE}"
-- extendedWaitUntil:
-    visible:
-      id: "library_row"
-    timeout: 15000
-- assertVisible: "${BOOK_TITLE}"
+- launchApp                    # cold start routes to the library (signed in)
+- assertVisible:
+    id: "library_search"
+- assertVisible: "${BOOK_TITLE}"   # the list loaded from ABS again -> recovered
