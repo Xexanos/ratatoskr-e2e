@@ -21,10 +21,11 @@ documented **locally per repo**. Repo-local test documentation lives in
 `ratatoskr-server/docs/testing.md` and `ratatoskr-app/docs/testing.md`
 respectively and links back to this document — it is not duplicated.
 
-> **Current status:** this repo currently only contains this test concept.
-> The actual E2E test suite will be added once deployable artifacts exist for
-> both owned components (a Docker image for the server, an `.apk` for the app) —
-> see [Section 8](#8-roadmap).
+> **Current status:** the E2E suite is built and running — all P1 and P2
+> scenarios (E2E-01..10, §5) are automated (`flows/`, `scripts/`,
+> `compose.e2e.yaml`) and CI (§6) triggers on server/app candidate artifacts
+> via `repository_dispatch`. What remains is the open-points list in
+> [Section 9](#9-open-points) and new scenarios as features land.
 
 ---
 
@@ -227,13 +228,17 @@ failure points at the harness); `main` × `main` is the optional informational r
 
 1. **Done:** this test concept — levels/types §2, tooling §4, scenario draft §5,
    CI cadence §6 — is written and agreed; the fake-Sonos approach is validated.
-2. **Now:** cross-repo prep (§9) — `docs/testing.md` in the app/server repos and
+2. **Done:** cross-repo prep (§9) — `docs/testing.md` in the app/server repos and
    the app `testTag` change for black-box driving.
-3. **Blocked on artifacts:** a Docker image for the server and an `.apk` for the
-   app (neither exists yet).
-4. **Then:** build the actual E2E suite here against those artifacts (docker-compose
-   stack: server + ABS + fake Sonos; app via emulator/device).
-5. **Then:** wire up CI (§6) and update the E2E scenario statuses (§5) as tests land.
+3. **Done:** deployable artifacts exist — the server ships a Docker image, the
+   app an `.apk`, both as promotable candidates.
+4. **Done:** the E2E suite is built against those artifacts (docker-compose
+   stack: server + ABS + fake Sonos; app via emulator) — all P1/P2 scenarios
+   E2E-01..10 are automated.
+5. **Done:** CI (§6) is wired — `repository_dispatch` on server/app candidates,
+   plus manual `workflow_dispatch`.
+6. **Now:** work down the remaining open points (§9) and add scenarios to §5 as
+   new features land in the app/server.
 
 ---
 
