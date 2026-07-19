@@ -93,6 +93,32 @@ cmd_up() {
   echo "run-e2e: stack is up (server healthy)"
 }
 
+# Pin the device UI locale to en-US (test-concept.md §9). The flows select by the app's English
+# text, and the app ships more UI languages (en-US + de-DE), so a device defaulting to another
+# locale fails the suite's very first assertVisible. Pinned at DEVICE level on purpose: the
+# per-app alternative (cmd locale set-app-locales) is wiped by the `pm clear` behind Maestro's
+# clearState launches, while the device locale - the fallback the app then resolves - survives it.
+# Setting persist.sys.locale needs adb root + a zygote restart; both are available on the
+# `default` (non-Google) emulator images CI uses. The effective-locale check up front means a
+# device already on en-US (every stock CI emulator) skips the restart entirely.
+pin_locale() {
+  local want="en-US" cur
+  cur="$(adb shell getprop persist.sys.locale </dev/null | tr -d '\r')"
+  [ -n "$cur" ] || cur="$(adb shell getprop ro.product.locale </dev/null | tr -d '\r')"
+  [ "$cur" = "$want" ] && return 0
+  echo "run-e2e: pinning the device locale to $want (was: ${cur:-unset})"
+  adb root >/dev/null   # restarts adbd - run before adb reverse, which an adbd restart would drop
+  adb wait-for-device
+  adb shell "setprop persist.sys.locale $want; setprop ctl.restart zygote" </dev/null
+  local i
+  for i in $(seq 1 60); do
+    [ "$(adb shell getprop sys.boot_completed </dev/null 2>/dev/null | tr -d '\r')" = "1" ] && break
+    sleep 2
+  done
+  cur="$(adb shell getprop persist.sys.locale </dev/null | tr -d '\r')"
+  [ "$cur" = "$want" ] || { echo "run-e2e: failed to pin the device locale to $want (got: ${cur:-unset})" >&2; return 1; }
+}
+
 # Shared prep for any drive verb: load env + fixture facts, require the APK and tools, wire adb.
 drive_prep() {
   load_artifacts
@@ -101,6 +127,8 @@ drive_prep() {
   : "${E2E_BOOK_TITLE:?E2E_BOOK_TITLE not set (run scripts/seed-abs.sh via 'up' first)}"
   command -v adb >/dev/null || { echo "run-e2e: adb not found (need a running emulator)" >&2; exit 1; }
   command -v maestro >/dev/null || { echo "run-e2e: maestro not found" >&2; exit 1; }
+
+  pin_locale   # before adb reverse: pinning may restart adbd, which drops reverses
 
   echo "run-e2e: adb reverse + install"
   adb reverse tcp:8080 tcp:8080
@@ -112,6 +140,13 @@ drive_prep() {
 # prior pause would slip through. Pause-from-playing stays covered by p1-pause + the PAUSED_PLAYBACK
 # assert; this adds the play->stop path back that moving Stop after Pause had removed.
 cmd_p1() {
+  # Locale canary first: proves the en-US pin actually resolves in the app UI (and survives the
+  # clearState launch the spine opens with) before p1-spine can fail mid-run on a selector miss.
+  # Lives here rather than drive_prep: its clearState wipe would destroy the signed-in end state
+  # a standalone drive-p2 resume depends on.
+  echo "run-e2e: locale canary (pinned en-US locale resolves in the app UI)"
+  maestro test "$root/flows/p0-locale-canary.yaml"
+
   echo "run-e2e: running the P1 spine"
   maestro test "$root/flows/p1-spine.yaml" \
     -e SERVER_URL="https://localhost:8080" \
