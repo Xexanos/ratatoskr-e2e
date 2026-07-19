@@ -1,0 +1,15 @@
+# Ratatoskr E2E - locale canary (test-concept.md §9: pin the E2E app locale).
+#
+# The flows drive the app through its ENGLISH text ("Connect", "Sign in", "Pause", ...), but the
+# app ships more UI languages (en-US + de-DE), so on a device whose locale resolves to German the
+# very first text selector already misses. drive_prep pins the app's per-app locale to en-US
+# (cmd locale set-app-locales); this canary guards that the pin actually took effect: it launches
+# the app exactly like p1-spine does (clearState: true - the pin must survive pm clear) and asserts
+# the suite's first English selector. If locale pinning ever regresses (emulator image change,
+# pm-clear semantics change, the pin line lost), THIS flow fails under an obvious name instead of
+# p1-spine failing mid-run on a puzzling selector miss.
+appId: io.github.xexanos.ratatoskr
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Connect"
