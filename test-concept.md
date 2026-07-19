@@ -249,7 +249,7 @@ failure points at the harness); `main` × `main` is the optional informational r
 - [x] Define CI cadence — §6
 - [x] Add `testTag`s + `testTagsAsResourceId` to the app for black-box driving — merged: [app#15](https://github.com/Xexanos/ratatoskr-app/pull/15)
 - [x] Pin the E2E emulator/app locale (e.g. `en-US`): most elements are driven by text / contentDescription rather than test tags, so text selectors need a fixed UI language to stay stable (the app ships en-US + de-DE — see app `docs/testing.md`) — done: `drive_prep` pins the **device** locale to en-US (`pin_locale` in `run-e2e.sh`; per-app locales don't survive the `pm clear` behind Maestro's `clearState`), guarded by `flows/p0-locale-canary.yaml` as the first drive step
-- [ ] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions
+- [x] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions — done: [server#99](https://github.com/Xexanos/ratatoskr-server/pull/99) — `SetAVTransportURI` now rejects bare http(s) transport URIs without DIDL-Lite `protocolInfo` with 714 (`AddURIToQueue` already did); `x-rincon-queue` URIs still travel without metadata
 - [x] Create `docs/testing.md` in the app and server repos (link back here) — merged: [server#16](https://github.com/Xexanos/ratatoskr-server/pull/16), [app#11](https://github.com/Xexanos/ratatoskr-app/pull/11)
 - [ ] Define staging/fixture data for ABS in E2E
 - [ ] Pin all external E2E inputs by digest (ABS image, base images, emulator system image, lockfiles) — prerequisite for having no scheduled run (§6)
