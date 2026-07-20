@@ -146,12 +146,24 @@ and dependent on built artifacts) runs off the PR critical path. Because E2E run
 **every merge to main**, `main` stays continuously E2E-validated — so a release is
 just a git tag on a green `main` commit, with no separate release-time E2E gate.
 
-There is deliberately **no scheduled (nightly) run**. To make that safe, **all
-external inputs are pinned by digest** — the ABS image, base images, the emulator
-system image, and dependencies via lockfiles. Environment drift can then only enter
-through a deliberate pin-bump PR, which is itself E2E-gated, so drift is always
-attributed to the change that introduced it rather than surfacing later on an
-unrelated PR.
+There is deliberately **no scheduled (nightly) run**. To make that safe, external
+inputs are pinned, so environment drift can only enter through a deliberate bump
+PR — itself E2E-gated — and is always attributed to the change that introduced it
+rather than surfacing later on an unrelated PR. "Pinned" means three deliberate
+tiers, not uniformly "by digest":
+
+- **Pinned hard:** the ABS image (by digest in `compose.e2e.yaml`), GitHub Actions
+  (by commit SHA, Dependabot-bumped), Maestro (exact version in `e2e.yml`), and
+  dependencies via lockfiles.
+- **Node base images** (server + fake-sonos Dockerfiles) track an **exact version
+  tag, not a digest** — a deliberate server-repo decision (documented in its
+  `dependabot.yml`): Dependabot proposes readable version bumps (LTS majors only),
+  same-version Alpine security rebuilds flow in via plain image rebuilds, and CVE
+  detection is Trivy's job (`image-scan.yml`), not the pin's.
+- **The emulator system image cannot be pinned** — `sdkmanager` has no revision
+  selection and always installs the latest `system-images;android-36;default;x86_64`.
+  The cached AVD snapshot freezes it in practice while the cache lives; a revision
+  bump after cache eviction is accepted residual drift.
 
 | Trigger | What runs | Blocking |
 |---|---|---|
@@ -252,6 +264,6 @@ failure points at the harness); `main` × `main` is the optional informational r
 - [x] Fake Sonos: enforce DIDL-Lite metadata (reject bare URL like real UPnP 714) so E2E catches server regressions — done: [server#99](https://github.com/Xexanos/ratatoskr-server/pull/99) — `SetAVTransportURI` now rejects bare http(s) transport URIs without DIDL-Lite `protocolInfo` with 714 (`AddURIToQueue` already did); `x-rincon-queue` URIs still travel without metadata
 - [x] Create `docs/testing.md` in the app and server repos (link back here) — merged: [server#16](https://github.com/Xexanos/ratatoskr-server/pull/16), [app#11](https://github.com/Xexanos/ratatoskr-app/pull/11)
 - [ ] Define staging/fixture data for ABS in E2E
-- [ ] Pin all external E2E inputs by digest (ABS image, base images, emulator system image, lockfiles) — prerequisite for having no scheduled run (§6)
+- [x] Pin all external E2E inputs by digest (ABS image, base images, emulator system image, lockfiles) — prerequisite for having no scheduled run (§6) — resolved: ABS image digest-pinned, Actions SHA-pinned ([#4](https://github.com/Xexanos/ratatoskr-e2e/pull/4)), Maestro version-pinned; node base images stay deliberately tag-pinned (server-repo policy: Dependabot version bumps + Trivy CVE scanning) and the emulator system image is unpinnable (accepted residual drift) — §6 now documents the three tiers
 - [x] Verify a single CI runner can host the Android emulator (needs KVM) **and** the docker-compose stack together — feasibility risk for the E2E job — proven in practice: the full suite (P1 spine + P2 failure cases) runs green on a single `ubuntu-latest` runner, e.g. [run 29713145322](https://github.com/Xexanos/ratatoskr-e2e/actions/runs/29713145322)
 - [ ] Provision E2E secrets/fixtures beyond ABS content: a known server TLS cert + fingerprint (E2E-01 trust-on-first-use) and ABS user credentials + the low-privilege streamer account (E2E-02)
