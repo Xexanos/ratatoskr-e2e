@@ -195,6 +195,60 @@ jobs:
         if: always()
         run: bash scripts/run-e2e.sh down
 
+      # Report the cross-component verdict back onto the producer's commit as a plain "e2e" commit
+      # status, so the result shows up in that repo (on the commit / its checks) without anyone
+      # opening this one. Placed BEFORE the promote steps on purpose: job.status here reflects the
+      # test outcome, not a later promote-dispatch hiccup, so the status says "did E2E pass". Runs
+      # on always() (a red run must report red - that is the whole point). Informational only: a
+      # failed status POST must not fail this run (the real gate is the run's conclusion + the
+      # promote dispatch below), so it warns rather than exits non-zero. The commit SHA comes from
+      # the same dispatch payload the producer already sends; the callback token already reaches
+      # that repo (it dispatches the *-e2e-passed event there too) - it just also needs
+      # statuses:write on it.
+      - name: Report the E2E verdict on the app commit (app-candidate)
+        if: always() && github.event_name == 'repository_dispatch' && github.event.action == 'app-candidate'
+        env:
+          GH_TOKEN: ${{ secrets.APP_PROMOTE_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          COMMIT: ${{ github.event.client_payload.commit }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::APP_PROMOTE_TOKEN not set; skipping the E2E commit status."; exit 0; fi
+          if [ -z "$COMMIT" ]; then echo "::warning::app-candidate payload had no commit; skipping the E2E commit status."; exit 0; fi
+          case "$JOB_STATUS" in
+            success)   state=success ;;
+            cancelled) state=error ;;
+            *)         state=failure ;;
+          esac
+          gh api "repos/$OWNER/ratatoskr-app/statuses/$COMMIT" \
+            -f state="$state" -f context=e2e \
+            -f description="Cross-component E2E: $state" \
+            -f target_url="$RUN_URL" \
+            || echo "::warning::could not post the E2E commit status to ratatoskr-app (visibility only)."
+
+      - name: Report the E2E verdict on the server commit (server-candidate)
+        if: always() && github.event_name == 'repository_dispatch' && github.event.action == 'server-candidate'
+        env:
+          GH_TOKEN: ${{ secrets.SERVER_PROMOTE_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          COMMIT: ${{ github.event.client_payload.sha }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::SERVER_PROMOTE_TOKEN not set; skipping the E2E commit status."; exit 0; fi
+          if [ -z "$COMMIT" ]; then echo "::warning::server-candidate payload had no sha; skipping the E2E commit status."; exit 0; fi
+          case "$JOB_STATUS" in
+            success)   state=success ;;
+            cancelled) state=error ;;
+            *)         state=failure ;;
+          esac
+          gh api "repos/$OWNER/ratatoskr-server/statuses/$COMMIT" \
+            -f state="$state" -f context=e2e \
+            -f description="Cross-component E2E: $state" \
+            -f target_url="$RUN_URL" \
+            || echo "::warning::could not post the E2E commit status to ratatoskr-server (visibility only)."
+
       - name: Promote the tested server image (green server-candidate run)
         if: success() && github.event_name == 'repository_dispatch' && github.event.action == 'server-candidate'
         env:
