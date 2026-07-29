@@ -72,6 +72,10 @@ services:
       ABS_ALLOW_PLAIN_HTTP: "true"
       # Set by run-e2e.sh after seeding (the stream-only account's API key).
       ABS_STREAMER_API_KEY: ${ABS_STREAMER_API_KEY:?seed ABS first; run-e2e.sh sets this}
+      # Post-ADR-0001 images (server#140/#153) refuse to boot without a session-store key. Set by
+      # run-e2e.sh (generated once per run - see cmd_up for why it must stay stable within a run).
+      # SESSION_STORE_PATH stays unset: the entrypoint defaults it to /data/sessions.enc.
+      SESSION_STORE_KEY: ${SESSION_STORE_KEY:?run-e2e.sh 'up' generates this per run}
       # Short ABS request timeout so E2E-10 (ABS stopped mid-run) surfaces the server's 502
       # "Audiobookshelf is unavailable" well under the app's ~10s read timeout - otherwise the app
       # could time out first and show a generic network error instead. Needs server#72 (the
@@ -99,6 +103,14 @@ services:
     ports:
       # The app (on the emulator) reaches this via `adb reverse tcp:8080 tcp:8080` -> localhost:8080.
       - "8080:8080"
+    volumes:
+      # The session store lives on its own /data volume (server#133); post-ADR-0001 entrypoints
+      # refuse to boot without it. Removed by cmd_down's `down -v` - the store is deliberately
+      # throwaway, fresh per run.
+      - ratatoskr-data:/data
     depends_on:
       - abs
       - fake-sonos
+
+volumes:
+  ratatoskr-data:
