@@ -68,14 +68,25 @@ cmd_up() {
   bash "$root/scripts/make-fixture.sh"
 
   echo "run-e2e: starting ABS + fake-sonos"
-  # ABS_STREAMER_API_KEY isn't known yet; give compose a placeholder so it doesn't error, then
-  # start only the two services the server depends on.
-  ABS_STREAMER_API_KEY="pending" "${COMPOSE[@]}" up -d abs fake-sonos
+  # ABS_STREAMER_API_KEY and SESSION_STORE_KEY aren't known yet; give compose placeholders so it
+  # doesn't error, then start only the two services the server depends on.
+  ABS_STREAMER_API_KEY="pending" SESSION_STORE_KEY="pending" \
+    "${COMPOSE[@]}" up -d abs fake-sonos
 
   wait_http "http://localhost:13378/status"
   echo "run-e2e: seeding ABS"
   bash "$root/scripts/seed-abs.sh" "$ENV_FILE"
   set -a; . "$ENV_FILE"; set +a   # ABS_STREAMER_API_KEY + fixture info
+
+  # Session-store key for the server (post-ADR-0001 images refuse to boot without one). Persisted
+  # to .e2e.env like ABS_STREAMER_API_KEY so every later compose invocation in this run - cmd_p2's
+  # stop/start cycles, a standalone drive - re-loads the SAME key: a key that changed mid-run would
+  # make the persisted store unreadable and fail tests for the wrong reason. seed-abs.sh rewrites
+  # .e2e.env just above, so appending here also guarantees a FRESH key per `up`, matching the fresh
+  # store volume from cmd_down's `down -v`.
+  SESSION_STORE_KEY="$(openssl rand -base64 32)"
+  export SESSION_STORE_KEY
+  echo "SESSION_STORE_KEY=\"$SESSION_STORE_KEY\"" >> "$ENV_FILE"
 
   echo "run-e2e: starting the server"
   "${COMPOSE[@]}" up -d ratatoskr
