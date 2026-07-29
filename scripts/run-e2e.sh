@@ -86,7 +86,7 @@ cmd_up() {
   # store volume from cmd_down's `down -v`.
   SESSION_STORE_KEY="$(openssl rand -base64 32)"
   export SESSION_STORE_KEY
-  echo "SESSION_STORE_KEY=\"$SESSION_STORE_KEY\"" >> "$ENV_FILE"
+  echo "SESSION_STORE_KEY=$SESSION_STORE_KEY" >> "$ENV_FILE"
 
   echo "run-e2e: starting the server"
   "${COMPOSE[@]}" up -d ratatoskr

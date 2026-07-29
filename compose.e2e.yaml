@@ -104,9 +104,9 @@ services:
       # The app (on the emulator) reaches this via `adb reverse tcp:8080 tcp:8080` -> localhost:8080.
       - "8080:8080"
     volumes:
-      # The session store's own volume (server#133); post-ADR-0001 entrypoints refuse to boot
-      # without a mounted /data. Named so `down -v` (cmd_down) removes it - the store is
-      # deliberately throwaway, fresh per run.
+      # The session store lives on its own /data volume (server#133); post-ADR-0001 entrypoints
+      # refuse to boot without it. Removed by cmd_down's `down -v` - the store is deliberately
+      # throwaway, fresh per run.
       - ratatoskr-data:/data
     depends_on:
       - abs
