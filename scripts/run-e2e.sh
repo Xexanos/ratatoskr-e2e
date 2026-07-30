@@ -18,12 +18,6 @@ COMPOSE=(docker compose -f compose.e2e.yaml)
 ENV_FILE="$root/.e2e.env"
 ARTIFACTS_ENV="$root/.e2e.artifacts.env"
 
-# Single source of truth for the ABS access-token TTL (seconds). compose.e2e.yaml reads the same
-# variable (ACCESS_TOKEN_EXPIRY: "${E2E_ACCESS_TOKEN_EXPIRY:-180}") and E2E-08's wait is derived
-# from it below, so the token lifetime and the wait can never drift apart in two files. Override by
-# exporting E2E_ACCESS_TOKEN_EXPIRY before the run.
-export E2E_ACCESS_TOKEN_EXPIRY="${E2E_ACCESS_TOKEN_EXPIRY:-180}"
-
 # Source a dotenv file if it exists, exporting its vars. Returns 0 when the file is absent, so a
 # bare call under `set -e` does not abort the script - the header promises image refs may come
 # "from the environment" instead of a fetch-artifacts run, and the `:?` guards below are what
@@ -186,26 +180,13 @@ cmd_p1() {
 
 cmd_drive() { drive_prep; cmd_p1; cmd_p2; }
 
-# ---- P2 failure cases (test-concept.md §5, E2E-07..10) ----
+# ---- P2 failure cases (test-concept.md §5, E2E-07/09/10) ----
 #
 # Ordering is deliberate:
-#   E2E-08 first - it must wait until the app's token is provably expired, and it leaves the app
-#     with a FRESH token, which E2E-10 depends on (with ABS down, a 401's refresh would also fail
-#     and surface "Sign-in expired." instead of the upstream error we want to see).
-#   E2E-10 next (ABS down/up) - no active session, so the only moving part is the library query.
+#   E2E-10 first (ABS down/up) - no active session, so the only moving part is the library query.
 #   E2E-09 next (speaker down/up) - starts and loses a session; recovery ends session-less.
 #   E2E-07 last - sign-out ends the signed-in state everything else depends on.
 cmd_p2() {
-  # E2E-08: the app must hold an access token OLDER than ACCESS_TOKEN_EXPIRY. The last possible
-  # rotation hand-over was the session stop in cmd_p1 (a pending rotated pair is delivered on the
-  # stop response), so waiting just past the TTL from here guarantees expiry.
-  local wait=$((E2E_ACCESS_TOKEN_EXPIRY + 10))
-  echo "run-e2e: E2E-08 - waiting ${wait}s for the app's access token to expire"
-  sleep "$wait"
-  echo "run-e2e: E2E-08 - cold start on an expired token must refresh silently"
-  maestro test "$root/flows/p2-refresh.yaml" -e BOOK_TITLE="$E2E_BOOK_TITLE"
-  refresh_ts=$(date +%s)
-
   echo "run-e2e: E2E-10 - stopping ABS (unreachable mid-run)"
   "${COMPOSE[@]}" stop abs
   maestro test "$root/flows/p2-abs-down.yaml"
@@ -214,28 +195,6 @@ cmd_p2() {
   "${COMPOSE[@]}" start abs
   wait_http "http://localhost:13378/status"
   maestro test "$root/flows/p2-abs-recovered.yaml" -e BOOK_TITLE="$E2E_BOOK_TITLE"
-
-  # E2E-09 holds Now-playing (~60s) where the app suppresses its own refresh, and once the speaker
-  # dies the error responses carry no rotatedTokens - so the access token must outlive the whole
-  # scenario. The ABS-restart wait_http just above is unbounded (up to 120s) and can eat the TTL
-  # budget, which would resurface as a mystery "Sign-in expired." mid-E2E-09. Guard it: if too much
-  # has elapsed since the last refresh, re-establish a fresh token first; only if that still can't
-  # recover a usable session do we fail fast, with a clear message instead of a flaky lapse.
-  local now elapsed budget to_expiry
-  now=$(date +%s); elapsed=$((now - refresh_ts))
-  budget=$((E2E_ACCESS_TOKEN_EXPIRY - 90))   # keep >=90s of token life for the E2E-09 session window
-  if [ "$elapsed" -gt "$budget" ]; then
-    echo "run-e2e: E2E-09 - ${elapsed}s since last refresh exceeds the ${budget}s budget; re-refreshing first"
-    # A still-valid token would not 401-refresh on the cold start, so push it past the TTL first,
-    # then re-run the refresh flow to reset the clock.
-    to_expiry=$((E2E_ACCESS_TOKEN_EXPIRY - elapsed))
-    [ "$to_expiry" -gt 0 ] && sleep $((to_expiry + 3))
-    if ! maestro test "$root/flows/p2-refresh.yaml" -e BOOK_TITLE="$E2E_BOOK_TITLE"; then
-      echo "::error::E2E-09 precondition failed: could not re-refresh a usable token before the session." >&2
-      exit 1
-    fi
-    refresh_ts=$(date +%s)
-  fi
 
   echo "run-e2e: E2E-09 - starting a session to kill"
   maestro test "$root/flows/p2-session-start.yaml"

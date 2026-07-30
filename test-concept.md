@@ -123,7 +123,7 @@ real-hardware verification — see §2).
 | E2E-05 | Now-playing: play / pause / seek / stop | P1 | control/state automated · audio manual | Done (`p1-spine`/`p1-pause`/`p1-stop` + fake transport-state asserts) |
 | E2E-06 | Progress synced back to ABS (source of truth) | P1 | Automated + ABS-state assertion | Done (`scripts/assert-abs-progress.sh`) |
 | E2E-07 | Sign out | P2 | Automated | Done (`flows/p2-signout.yaml`) |
-| E2E-08 | 401 → silent token refresh; active session continues | P2 | Automated | Done (`flows/p2-refresh.yaml` + short-TTL rotation through the P1 session) |
+| E2E-08 | 401 → silent token refresh; active session continues | P2 | — | Retired (token rotation removed by server ADR-0001; the app holds a non-expiring Ratatoskr token) |
 | E2E-09 | Speaker disappears mid-session | P2 | Automated | Done (`flows/p2-speaker-lost.yaml` + relinquish recovery) |
 | E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Automated | Done (`flows/p2-abs-down.yaml` + recovery) |
 
