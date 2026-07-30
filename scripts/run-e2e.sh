@@ -143,6 +143,13 @@ drive_prep() {
 
   echo "run-e2e: adb reverse + install"
   adb reverse tcp:8080 tcp:8080
+  # The cached AVD's data image can carry the app from the run that saved the cache, signed with
+  # that run's debug keystore. Normally invisible (the quick-boot snapshot restores a clean state),
+  # but when an emulator update invalidates the snapshot, the AVD cold-boots off the dirty image and
+  # `install -r` dies with INSTALL_FAILED_UPDATE_INCOMPATIBLE on the signature mismatch. A fresh
+  # install is wanted here anyway, so remove any leftover first; absent package exits non-zero,
+  # hence the `|| true`.
+  adb uninstall io.github.xexanos.ratatoskr >/dev/null 2>&1 || true
   adb install -r -g "$APP_APK"
 }
 
