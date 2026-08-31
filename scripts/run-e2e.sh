@@ -217,7 +217,24 @@ cmd_p2() {
   maestro test "$root/flows/p2-signout.yaml"
 }
 
-cmd_down() { "${COMPOSE[@]}" down -v || true; }
+# Teardown, volumes included - the session store and the generated certificate are deliberately
+# throwaway, fresh per run.
+#
+# Compose interpolates the WHOLE file for `down` too, so the `:?` guards on the image refs and the
+# keys abort it when nothing has loaded the environment - and the `|| true` below would then hide
+# that, leaving the volumes in place. The next `up` generates a new SESSION_STORE_KEY, meets the
+# previous run's store on the surviving volume, and the server refuses to start on a store it
+# cannot decrypt. So load whatever this run recorded and fill the gaps with placeholders: tearing
+# down cares about none of those values, and teardown has to work even for a run that failed
+# before it wrote them.
+cmd_down() {
+  load_artifacts
+  source_env "$ENV_FILE"
+  SERVER_IMAGE="${SERVER_IMAGE:-none}" FAKE_SONOS_IMAGE="${FAKE_SONOS_IMAGE:-none}" \
+    ABS_STREAMER_API_KEY="${ABS_STREAMER_API_KEY:-none}" SESSION_STORE_KEY="${SESSION_STORE_KEY:-none}" \
+    "${COMPOSE[@]}" down -v || true
+}
+
 
 case "${1:-all}" in
   up) cmd_up ;;
