@@ -251,8 +251,8 @@ cmd_p2() {
 
   # Only now put the name back - the targeted prompt above is the proof the chain is dead, so
   # reversing the rename after it can no longer make that outcome ambiguous. It has to happen
-  # before the re-login: that prompt sends a password only, and the server signs in with the
-  # username it stored.
+  # before the re-login: the user only types a password there, but the app signs in with the
+  # username it had remembered and pre-filled.
   echo "run-e2e: E2E-12 - restoring the ABS account, then recovering with the password"
   bash "$root/scripts/abs-rename-user.sh" "$dead_abs_user" "$E2E_ABS_USER" "$ENV_FILE"
   maestro test "$root/flows/p2-upstream-session-recovered.yaml" \

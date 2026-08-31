@@ -25,7 +25,8 @@ appId: io.github.xexanos.ratatoskr
     visible: "Your media-server sign-in expired. Enter your password to reconnect."
     timeout: 45000             # async boot refresh + one 5s app poll, with generous margin
 - assertNotVisible: "You were signed out. Enter your password to sign in again."
-# ...and it is a password-only prompt: the username is already filled in from storage. That is
-# what lets the harness put the ABS account back under its old name before the recovery flow -
-# the server signs in with the username it stored, and only the password travels from here.
+# ...and it is a password-only prompt as far as the user is concerned: the username is already
+# filled in from storage, and the app re-sends that remembered value with the password. Which is
+# why the harness has to put the ABS account back under its old name before the recovery flow -
+# that name is the one the sign-in will carry.
 - assertVisible: "${ABS_USER}"

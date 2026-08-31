@@ -11,7 +11,7 @@ end-to-end testing consists of **four parts**:
 
 | Part | What | Ownership |
 |---|---|---|
-| App | Android app (Kotlin/Compose) – "thin remote", talks **only** to the server over HTTPS `/v1/`; no audio, no domain logic | [ratatoskr-app](https://github.com/Xexanos/ratatoskr-app) |
+| App | Android app (Kotlin/Compose) – "thin remote", talks **only** to the server over HTTPS `/v2/`; no audio, no domain logic | [ratatoskr-app](https://github.com/Xexanos/ratatoskr-app) |
 | Ratatoskr server | The bridge (Node.js). Controls Sonos (UPnP/SOAP), talks to ABS (REST). Audio never flows through it | [ratatoskr-server](https://github.com/Xexanos/ratatoskr-server) |
 | Audiobookshelf (ABS) | **External.** Audiobook server; source of truth for progress and authentication | third-party |
 | Fake Sonos | **Custom test double (this repo).** Stands in for physical speakers over local UPnP/SOAP. The official Sonos simulator does *not* fit — it targets the cloud Control API, not the local protocol the server uses (see §4). **Not equal to real hardware** (see §2, manual verification) | this repo |
@@ -143,6 +143,9 @@ real-hardware verification — see §2).
   provokes that refusal at once instead of waiting out the daily sweep. Only for
   that one restart: ABS rate-limits authentication (~40 requests, `/login`
   included), so a permanently short sweep would 429 the suite's own sign-ins.
+  Applying an env change means recreating the container, so the server's
+  generated TLS certificate needs a volume of its own — otherwise the recreate
+  mints a new one and every later flow fails the fingerprint E2E-01 pinned.
 - **Single active session** is a system invariant (one book on one speaker at a
   time) — scenarios must not assume concurrent sessions.
 

@@ -66,7 +66,11 @@ services:
       # A sweep every couple of seconds exhausts that budget within a minute, and everything that
       # authenticates afterwards - the progress write-back behind E2E-06, the re-login in E2E-12 -
       # then fails with 429 for reasons that have nothing to do with the scenario under test.
-      KEEP_ALIVE_REFRESH_INTERVAL_MS: ${KEEP_ALIVE_REFRESH_INTERVAL_MS:-86400000}
+      #
+      # Named with no value on purpose, so the default stays the SERVER's: compose then passes the
+      # variable through empty unless the environment carries one, and an empty value is what the
+      # server reads as "unset". Restating 86400000 here would silently pin today's default.
+      KEEP_ALIVE_REFRESH_INTERVAL_MS:
       # Short ABS request timeout so E2E-10 (ABS stopped mid-run) surfaces the server's 502
       # "Audiobookshelf is unavailable" well under the app's ~10s read timeout - otherwise the app
       # could time out first and show a generic network error instead. Needs server#72 (the

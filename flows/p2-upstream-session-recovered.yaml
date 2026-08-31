@@ -1,8 +1,8 @@
 # Ratatoskr E2E - E2E-12 (recovery): the password alone brings the app back. Attaches to the
 # sign-in screen p2-upstream-session-lost.yaml left in the foreground (no launchApp - see
 # p1-stop.yaml for why relaunching would be wrong here); the harness renamed the ABS account back
-# in between, which it had to: this prompt sends only a password, and the server signs in with the
-# username it stored for the device.
+# in between, which it had to: the user only types a password, but the app signs in with the
+# username it had remembered and pre-filled.
 #
 # Signing in opens a fresh Audiobookshelf chain and retires the dead entry (server SPEC §8), so
 # the library loads again - and the suite's final sign-out (E2E-07) has a live session to end.
