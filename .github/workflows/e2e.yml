@@ -203,7 +203,7 @@ jobs:
         continue-on-error: true
         run: |
           if ! bash scripts/run-e2e.sh down; then
-            echo "::warning title=E2E teardown failed::the stack may still be up on this runner - see this step's log"
+            echo "::warning::E2E teardown failed - the stack may still be up on this runner; see this step's log."
             exit 1
           fi
 
