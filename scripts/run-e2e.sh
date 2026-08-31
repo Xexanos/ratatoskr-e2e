@@ -283,8 +283,7 @@ cmd_down() {
   SERVER_IMAGE="${SERVER_IMAGE:-none}" FAKE_SONOS_IMAGE="${FAKE_SONOS_IMAGE:-none}" \
     ABS_STREAMER_API_KEY="${ABS_STREAMER_API_KEY:-none}" SESSION_STORE_KEY="${SESSION_STORE_KEY:-none}" \
     "${COMPOSE[@]}" down -v || {
-      echo "run-e2e: teardown failed - the stack may still be up (ports 8080/13378 bound), and a" >&2
-      echo "run-e2e: surviving ratatoskr-data volume breaks the next 'up' on an unreadable store." >&2
+      echo "run-e2e: teardown failed - the stack may still be up; a surviving volume breaks the next 'up'" >&2
       return 1
     }
 }
@@ -297,7 +296,10 @@ case "${1:-all}" in
   down) cmd_down ;;
   # Tear down on exit (success or failure) so a failed local `all` run never leaves the stack up
   # with host ports 8080/13378 bound, colliding with the next attempt. (CI runs up/drive/down as
-  # separate steps and relies on the workflow's if: always() teardown instead.)
+  # separate steps and relies on the workflow's if: always() teardown instead.) A teardown that
+  # fails inside the trap replaces the run's exit code with its own 1 - accepted rather than worked
+  # around: it can only turn a green run red, never hide a red one, and every failure this suite
+  # raises is a 1 anyway.
   all) trap cmd_down EXIT; cmd_up; cmd_drive ;;
   *) echo "usage: run-e2e.sh {up|drive|drive-p1|drive-p2|down|all}" >&2; exit 2 ;;
 esac
