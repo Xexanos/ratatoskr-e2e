@@ -5,8 +5,7 @@
 # We use launchApp (cold start) rather than recovering the search field in place: relying on IME
 # focus + cursor position surviving a separate maestro invocation and the up-to-~2min ABS-restart
 # idle proved fragile. The cold-start library load is an equally strong recovery proof - it can
-# only succeed if ABS is reachable again (and, if the token lapsed while ABS was down, it silently
-# refreshes now that ABS answers).
+# only succeed if ABS is reachable again.
 appId: io.github.xexanos.ratatoskr
 ---
 - launchApp                    # cold start routes to the library (signed in)

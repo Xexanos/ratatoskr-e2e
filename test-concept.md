@@ -53,7 +53,7 @@ These run *at* one or more levels; they are not additional pyramid layers.
 | Type | What | Where |
 |---|---|---|
 | Accessibility | a11y checks per screen, light + dark | repo-local (app) |
-| Security | TLS trust-on-first-use, token rotation, encrypted token storage, low-privilege streamer account, log redaction | repo-local + periodic review |
+| Security | TLS trust-on-first-use, encrypted credential storage (the app's Ratatoskr token, the server's session store), low-privilege streamer account, log redaction | repo-local + periodic review |
 | Compatibility | matrix: ABS version (≥ 2.26), Android range (SDK 26–36), Sonos/SYMFONISK models | repo-local / matrix |
 | Manual real-hardware verification | real Sonos/SYMFONISK devices — the fake cannot reproduce all UPnP behavior (DIDL-Lite metadata, `REL_TIME` seeking, unreliable reported track duration) | **here (central, process)** |
 
@@ -70,7 +70,7 @@ server). The type-level contract is therefore correct *by construction* — a
 The two residual risks are covered elsewhere:
 
 - **Runtime conformance** (does the running server actually emit spec-conformant
-  responses — enum values, error shapes, token-rotation handover?) → verified
+  responses — enum values, error shapes, the `code` a 401 carries?) → verified
   **server-internally** (integration tests against the raw contract).
 - **Version drift** (does the contract version the app pins match what the server
   serves?) → surfaces naturally in **E2E**, where the real app talks to the real
@@ -117,7 +117,7 @@ real-hardware verification — see §2).
 | ID | Scenario | Prio | Coverage | Status |
 |---|---|---|---|---|
 | E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Automated | Done (`flows/p1-spine.yaml`) |
-| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Automated | Done (`flows/p1-spine.yaml`) |
+| E2E-02 | Sign in with ABS credentials → server-issued Ratatoskr token; session survives app restart | P1 | Automated | Done (`flows/p1-spine.yaml`) |
 | E2E-03 | Browse + search the library | P1 | Automated | Done (`flows/p1-spine.yaml`) |
 | E2E-04 | Start a book on a speaker → resumes from stored position | P1 | control/state automated · audio manual | Done (`flows/p1-spine.yaml`) |
 | E2E-05 | Now-playing: play / pause / seek / stop | P1 | control/state automated · audio manual | Done (`p1-spine`/`p1-pause`/`p1-stop` + fake transport-state asserts) |

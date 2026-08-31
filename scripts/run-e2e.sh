@@ -17,6 +17,11 @@ cd "$root"
 COMPOSE=(docker compose -f compose.e2e.yaml)
 ENV_FILE="$root/.e2e.env"
 ARTIFACTS_ENV="$root/.e2e.artifacts.env"
+# Readiness probe for the server, on the major the suite now drives (server ADR-0001 cut the app
+# over to /v2; /v1 is frozen and only still served for older clients). Probing /v2 makes a server
+# image that predates the cut fail here, with the URL naming why, instead of surviving into a
+# Maestro flow that then misses a selector for an unrelated-looking reason.
+SERVER_HEALTH="https://localhost:8080/v2/health"
 
 # Source a dotenv file if it exists, exporting its vars. Returns 0 when the file is absent, so a
 # bare call under `set -e` does not abort the script - the header promises image refs may come
@@ -84,7 +89,7 @@ cmd_up() {
 
   echo "run-e2e: starting the server"
   "${COMPOSE[@]}" up -d ratatoskr
-  wait_http "https://localhost:8080/v1/health" insecure
+  wait_http "$SERVER_HEALTH" insecure
 
   # Record the server cert's SHA-256 fingerprint for the TOFU assertion (E2E-01). The entrypoint
   # generates a fresh self-signed cert per run, so it must be read at runtime. Format it exactly
