@@ -22,7 +22,7 @@ documented **locally per repo**. Repo-local test documentation lives in
 respectively and links back to this document — it is not duplicated.
 
 > **Current status:** the E2E suite is built and running — all P1 and P2
-> scenarios (E2E-01..10, §5) are automated (`flows/`, `scripts/`,
+> scenarios (E2E-01..12, §5) are automated (`flows/`, `scripts/`,
 > `compose.e2e.yaml`) and CI (§6) triggers on server/app candidate artifacts
 > via `repository_dispatch`. What remains is the open-points list in
 > [Section 9](#9-open-points) and new scenarios as features land.
@@ -126,6 +126,8 @@ real-hardware verification — see §2).
 | E2E-08 | 401 → silent token refresh; active session continues | P2 | — | Retired (token rotation removed by server ADR-0001; the app holds a non-expiring Ratatoskr token) |
 | E2E-09 | Speaker disappears mid-session | P2 | Automated | Done (`flows/p2-speaker-lost.yaml` + relinquish recovery) |
 | E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Automated | Done (`flows/p2-abs-down.yaml` + recovery) |
+| E2E-11 | Server restart while signed in (idle) → no re-login; the session store survives | P2 | Automated | Done (`flows/p2-server-restarted.yaml`) |
+| E2E-12 | Server's ABS session dies → targeted password prompt (not a generic sign-out) + recovery | P2 | Automated | Done (`flows/p2-upstream-session-lost.yaml` + recovery) |
 
 **Setup requirements implied by these scenarios:**
 
@@ -133,6 +135,14 @@ real-hardware verification — see §2).
   black box — needed to assert progress in E2E-06.
 - ABS needs **fixture data**: a known user + at least one audiobook with a known
   starting position (E2E-04, E2E-06).
+- The harness must also be able to **mutate ABS state** through its admin API —
+  E2E-12 renames the app's ABS account, which is what makes ABS refuse the
+  refresh token the server stored for the device (server ADR-0001).
+- The server must be restartable **with a shortened keep-alive interval**
+  (`KEEP_ALIVE_REFRESH_INTERVAL_MS`, server SPEC §7) so E2E-12's boot pass
+  provokes that refusal at once instead of waiting out the daily sweep. Only for
+  that one restart: ABS rate-limits authentication (~40 requests, `/login`
+  included), so a permanently short sweep would 429 the suite's own sign-ins.
 - **Single active session** is a system invariant (one book on one speaker at a
   time) — scenarios must not assume concurrent sessions.
 
@@ -246,7 +256,7 @@ failure points at the harness); `main` × `main` is the optional informational r
    app an `.apk`, both as promotable candidates.
 4. **Done:** the E2E suite is built against those artifacts (docker-compose
    stack: server + ABS + fake Sonos; app via emulator) — all P1/P2 scenarios
-   E2E-01..10 are automated.
+   E2E-01..12 are automated.
 5. **Done:** CI (§6) is wired — `repository_dispatch` on server/app candidates,
    plus manual `workflow_dispatch`.
 6. **Now:** work down the remaining open points (§9) and add scenarios to §5 as
