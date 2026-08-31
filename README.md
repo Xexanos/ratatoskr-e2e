@@ -72,7 +72,10 @@ bash scripts/run-e2e.sh down
 startup, so `up` deliberately seeds ABS **before** starting the server. A teardown
 that fails exits non-zero rather than passing quietly — the stack is then still up
 with ports 8080/13378 bound, and the surviving `ratatoskr-data` volume makes the
-next `up` fail on a session store the freshly generated key cannot decrypt.
+next `up` fail on a session store the freshly generated key cannot decrypt. CI
+tolerates that exit code on purpose (its runners are discarded, so nothing outlives
+them): there a failed teardown shows up as a warning and a red step, while the job's
+verdict stays a statement about the tests.
 
 ## Tests in CI
 
