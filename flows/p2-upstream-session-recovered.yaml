@@ -1,0 +1,22 @@
+# Ratatoskr E2E - E2E-12 (recovery): the password alone brings the app back. Attaches to the
+# sign-in screen p2-upstream-session-lost.yaml left in the foreground (no launchApp - see
+# p1-stop.yaml for why relaunching would be wrong here); the harness renamed the ABS account back
+# in between, which it had to: this prompt sends only a password, and the server signs in with the
+# username it stored for the device.
+#
+# Signing in opens a fresh Audiobookshelf chain and retires the dead entry (server SPEC §8), so
+# the library loads again - and the suite's final sign-out (E2E-07) has a live session to end.
+appId: io.github.xexanos.ratatoskr
+---
+- assertVisible: "Your media-server sign-in expired. Enter your password to reconnect."
+- tapOn: "Password"            # the username field is already filled in - only this one is empty
+- inputText: "${ABS_PASS}"
+- hideKeyboard
+- tapOn: "Sign in"
+# Waited for, not asserted outright: this sign-in does more than the P1 spine's - besides minting
+# the device's token it opens a whole new Audiobookshelf chain upstream before the library loads.
+- extendedWaitUntil:
+    visible:
+      id: "library_search"     # back on the library -> a fresh chain was opened
+    timeout: 20000
+- assertVisible: "${BOOK_TITLE}"   # ...and it really answered from ABS through that new chain

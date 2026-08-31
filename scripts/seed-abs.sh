@@ -7,6 +7,7 @@
 #
 # Writes a dotenv file (default: <repo>/.e2e.env) with:
 #   ABS_STREAMER_API_KEY  E2E_ABS_USER  E2E_ABS_PASS  E2E_ITEM_ID  E2E_RESUME_SECONDS  E2E_BOOK_DURATION
+#   E2E_ABS_ROOT_USER  E2E_ABS_ROOT_PASS
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -119,6 +120,11 @@ cat > "$ENV_OUT" <<EOF
 ABS_STREAMER_API_KEY=$streamer_key
 E2E_ABS_USER=$END_USER
 E2E_ABS_PASS=$END_PASS
+# The admin account, so a later fixture step can reach the ABS admin API without hardcoding these
+# a second time: E2E-12 renames the end user through it (scripts/abs-rename-user.sh). Not a secret
+# in any meaningful sense - the whole ABS instance is created and destroyed inside one run.
+E2E_ABS_ROOT_USER=$ROOT_USER
+E2E_ABS_ROOT_PASS=$ROOT_PASS
 E2E_ITEM_ID=$item
 E2E_BOOK_TITLE="$title"
 E2E_RESUME_SECONDS=$RESUME_SECONDS

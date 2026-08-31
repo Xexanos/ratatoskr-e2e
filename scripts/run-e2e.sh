@@ -230,6 +230,34 @@ cmd_p2() {
   wait_http "$SERVER_HEALTH" insecure
   maestro test "$root/flows/p2-server-restarted.yaml" -e BOOK_TITLE="$E2E_BOOK_TITLE"
 
+  # E2E-12: kill the server's Audiobookshelf chain the way ADR-0001 documents - rename the account
+  # upstream, so ABS refuses the refresh token the server stored for this device. The rename
+  # happens while the server is down, so the boot pass on the way back up is what discovers it.
+  #
+  # That boot pass only renews chains older than KEEP_ALIVE_REFRESH_INTERVAL_MS, so the interval is
+  # shortened for this restart alone - which needs a RECREATE (`up -d`), since compose only applies
+  # an environment change by replacing the container. The certificate survives that because it sits
+  # on its own volume (compose.e2e.yaml), so the app's E2E-01 fingerprint still matches. Thirty
+  # seconds: far below the chain's age by now (it was minted at sign-in, several scenarios ago) yet
+  # long enough that the sweeps after the recovery below do not eat into the roughly forty
+  # authentication requests ABS allows before it starts answering 429.
+  dead_abs_user="$E2E_ABS_USER-renamed"
+  echo "run-e2e: E2E-12 - renaming the app's ABS account so the server's chain dies"
+  "${COMPOSE[@]}" stop ratatoskr
+  bash "$root/scripts/abs-rename-user.sh" "$E2E_ABS_USER" "$dead_abs_user" "$ENV_FILE"
+  KEEP_ALIVE_REFRESH_INTERVAL_MS=30000 "${COMPOSE[@]}" up -d ratatoskr
+  wait_http "$SERVER_HEALTH" insecure
+  maestro test "$root/flows/p2-upstream-session-lost.yaml" -e ABS_USER="$E2E_ABS_USER"
+
+  # Only now put the name back - the targeted prompt above is the proof the chain is dead, so
+  # reversing the rename after it can no longer make that outcome ambiguous. It has to happen
+  # before the re-login: that prompt sends a password only, and the server signs in with the
+  # username it stored.
+  echo "run-e2e: E2E-12 - restoring the ABS account, then recovering with the password"
+  bash "$root/scripts/abs-rename-user.sh" "$dead_abs_user" "$E2E_ABS_USER" "$ENV_FILE"
+  maestro test "$root/flows/p2-upstream-session-recovered.yaml" \
+    -e ABS_PASS="$E2E_ABS_PASS" -e BOOK_TITLE="$E2E_BOOK_TITLE"
+
   echo "run-e2e: E2E-07 - signing out"
   maestro test "$root/flows/p2-signout.yaml"
 }
@@ -251,7 +279,6 @@ cmd_down() {
     ABS_STREAMER_API_KEY="${ABS_STREAMER_API_KEY:-none}" SESSION_STORE_KEY="${SESSION_STORE_KEY:-none}" \
     "${COMPOSE[@]}" down -v || true
 }
-
 
 case "${1:-all}" in
   up) cmd_up ;;
