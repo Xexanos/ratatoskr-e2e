@@ -1,0 +1,24 @@
+# Ratatoskr E2E - E2E-11: the server restarts while the app is signed in and idle (test-concept.md
+# §5). Server ADR-0001's hard requirement - "server restarts must never force a re-login" - and the
+# regression only E2E can catch: the encrypted session store really lands on the /data volume, the
+# key really is the same one after the restart, and the device's entry really survives. Each of
+# those three is fine in isolation inside the server repo; only the full stack proves the chain.
+#
+# The harness stopped and started the `ratatoskr` container just before this flow - the same
+# container, so the only thing that changed is the process: had the entry not really been written
+# to /data, re-read, and decrypted with the same key, there would be nothing left to sign in with.
+# No playback session is running either (E2E-09's recovery ended session-less); a restart
+# mid-playback is a separate scenario the app's UX does not specify yet.
+#
+# The proof is the library CONTENT after a cold start: those rows can only come from a
+# /v2/library/items call the *restarted* server authenticated with the token the app still holds.
+# Had the store not survived, that token would be unknown, the call and the 5s session poll would
+# both 401, and the app would bounce to the sign-in screen instead of ever showing the book.
+appId: io.github.xexanos.ratatoskr
+---
+- launchApp                    # cold start, no clearState: the stored session is the whole point
+- extendedWaitUntil:
+    visible:
+      id: "library_search"
+    timeout: 20000             # cold start + the first library round-trip, with margin
+- assertVisible: "${BOOK_TITLE}"   # served by the restarted server -> still signed in

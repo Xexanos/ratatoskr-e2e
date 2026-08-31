@@ -192,11 +192,13 @@ cmd_p1() {
 
 cmd_drive() { drive_prep; cmd_p1; cmd_p2; }
 
-# ---- P2 failure cases (test-concept.md §5, E2E-07/09/10) ----
+# ---- P2 failure cases (test-concept.md §5, E2E-07/09/10/11/12) ----
 #
 # Ordering is deliberate:
 #   E2E-10 first (ABS down/up) - no active session, so the only moving part is the library query.
 #   E2E-09 next (speaker down/up) - starts and loses a session; recovery ends session-less.
+#   E2E-11 then E2E-12 - the two auth-model scenarios, both of which need the app signed in and
+#     idle, which is exactly the state E2E-09's recovery leaves behind.
 #   E2E-07 last - sign-out ends the signed-in state everything else depends on.
 cmd_p2() {
   echo "run-e2e: E2E-10 - stopping ABS (unreachable mid-run)"
@@ -217,6 +219,16 @@ cmd_p2() {
   "${COMPOSE[@]}" start fake-sonos
   wait_fake_soap   # don't let a slow fake boot eat p2-session-relinquished's 30s window
   maestro test "$root/flows/p2-session-relinquished.yaml"
+
+  # E2E-11: server ADR-0001's hard requirement - a restart must never force a re-login. `stop` +
+  # `start` restarts the very same container, so nothing but the process changes: the session store
+  # on /data, the certificate on /tls and the store key in the environment all stay exactly as they
+  # were, which is what makes the flow's "still signed in" a statement about the store alone.
+  echo "run-e2e: E2E-11 - restarting the server while signed in (idle)"
+  "${COMPOSE[@]}" stop ratatoskr
+  "${COMPOSE[@]}" start ratatoskr
+  wait_http "$SERVER_HEALTH" insecure
+  maestro test "$root/flows/p2-server-restarted.yaml" -e BOOK_TITLE="$E2E_BOOK_TITLE"
 
   echo "run-e2e: E2E-07 - signing out"
   maestro test "$root/flows/p2-signout.yaml"
