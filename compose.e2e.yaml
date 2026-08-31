@@ -55,6 +55,22 @@ services:
       # run-e2e.sh (generated once per run - see cmd_up for why it must stay stable within a run).
       # SESSION_STORE_PATH stays unset: the entrypoint defaults it to /data/sessions.enc.
       SESSION_STORE_KEY: ${SESSION_STORE_KEY:?run-e2e.sh 'up' generates this per run}
+      # The keep-alive sweep's cadence AND the boot pass's staleness cutoff (server SPEC §7). Left
+      # at the server's own daily default for almost the whole run; E2E-12 alone overrides it (via
+      # the environment, which is why it is interpolated here) and recreates the server, so that
+      # its boot pass finds the stored chain overdue and renews it at once - against an ABS whose
+      # account the harness has just renamed, which is what marks the chain dead.
+      #
+      # Deliberately NOT shortened for the whole run: Audiobookshelf rate-limits authentication to
+      # roughly forty requests, counts `/login` in the same bucket, and stays tripped for minutes.
+      # A sweep every couple of seconds exhausts that budget within a minute, and everything that
+      # authenticates afterwards - the progress write-back behind E2E-06, the re-login in E2E-12 -
+      # then fails with 429 for reasons that have nothing to do with the scenario under test.
+      #
+      # Named with no value on purpose, so the default stays the SERVER's: compose then passes the
+      # variable through empty unless the environment carries one, and an empty value is what the
+      # server reads as "unset". Restating 86400000 here would silently pin today's default.
+      KEEP_ALIVE_REFRESH_INTERVAL_MS:
       # Short ABS request timeout so E2E-10 (ABS stopped mid-run) surfaces the server's 502
       # "Audiobookshelf is unavailable" well under the app's ~10s read timeout - otherwise the app
       # could time out first and show a generic network error instead. Needs server#72 (the
@@ -87,9 +103,18 @@ services:
       # refuse to boot without it. Removed by cmd_down's `down -v` - the store is deliberately
       # throwaway, fresh per run.
       - ratatoskr-data:/data
+      # The generated self-signed certificate, on a volume for the same reason the production
+      # compose.yaml bind-mounts ./tls: the entrypoint means it to be PERSISTENT, and the app pins
+      # its fingerprint on first connect (E2E-01). Without the volume it lives in the container
+      # layer, so recreating the container mints a new certificate and every later flow fails the
+      # trust check - which is what E2E-12 would hit when it recreates the server to shorten
+      # KEEP_ALIVE_REFRESH_INTERVAL_MS. `down -v` removes it too, so each run still gets a fresh
+      # certificate and E2E-01 still confirms a fingerprint it has never seen.
+      - ratatoskr-tls:/tls
     depends_on:
       - abs
       - fake-sonos
 
 volumes:
   ratatoskr-data:
+  ratatoskr-tls:

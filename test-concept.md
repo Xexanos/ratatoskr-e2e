@@ -11,7 +11,7 @@ end-to-end testing consists of **four parts**:
 
 | Part | What | Ownership |
 |---|---|---|
-| App | Android app (Kotlin/Compose) – "thin remote", talks **only** to the server over HTTPS `/v1/`; no audio, no domain logic | [ratatoskr-app](https://github.com/Xexanos/ratatoskr-app) |
+| App | Android app (Kotlin/Compose) – "thin remote", talks **only** to the server over HTTPS `/v2/`; no audio, no domain logic | [ratatoskr-app](https://github.com/Xexanos/ratatoskr-app) |
 | Ratatoskr server | The bridge (Node.js). Controls Sonos (UPnP/SOAP), talks to ABS (REST). Audio never flows through it | [ratatoskr-server](https://github.com/Xexanos/ratatoskr-server) |
 | Audiobookshelf (ABS) | **External.** Audiobook server; source of truth for progress and authentication | third-party |
 | Fake Sonos | **Custom test double (this repo).** Stands in for physical speakers over local UPnP/SOAP. The official Sonos simulator does *not* fit — it targets the cloud Control API, not the local protocol the server uses (see §4). **Not equal to real hardware** (see §2, manual verification) | this repo |
@@ -22,7 +22,7 @@ documented **locally per repo**. Repo-local test documentation lives in
 respectively and links back to this document — it is not duplicated.
 
 > **Current status:** the E2E suite is built and running — all P1 and P2
-> scenarios (E2E-01..10, §5) are automated (`flows/`, `scripts/`,
+> scenarios (E2E-01..12, §5) are automated (`flows/`, `scripts/`,
 > `compose.e2e.yaml`) and CI (§6) triggers on server/app candidate artifacts
 > via `repository_dispatch`. What remains is the open-points list in
 > [Section 9](#9-open-points) and new scenarios as features land.
@@ -53,7 +53,7 @@ These run *at* one or more levels; they are not additional pyramid layers.
 | Type | What | Where |
 |---|---|---|
 | Accessibility | a11y checks per screen, light + dark | repo-local (app) |
-| Security | TLS trust-on-first-use, token rotation, encrypted token storage, low-privilege streamer account, log redaction | repo-local + periodic review |
+| Security | TLS trust-on-first-use, encrypted credential storage (the app's Ratatoskr token, the server's session store), low-privilege streamer account, log redaction | repo-local + periodic review |
 | Compatibility | matrix: ABS version (≥ 2.26), Android range (SDK 26–36), Sonos/SYMFONISK models | repo-local / matrix |
 | Manual real-hardware verification | real Sonos/SYMFONISK devices — the fake cannot reproduce all UPnP behavior (DIDL-Lite metadata, `REL_TIME` seeking, unreliable reported track duration) | **here (central, process)** |
 
@@ -70,7 +70,7 @@ server). The type-level contract is therefore correct *by construction* — a
 The two residual risks are covered elsewhere:
 
 - **Runtime conformance** (does the running server actually emit spec-conformant
-  responses — enum values, error shapes, token-rotation handover?) → verified
+  responses — enum values, error shapes, the `code` a 401 carries?) → verified
   **server-internally** (integration tests against the raw contract).
 - **Version drift** (does the contract version the app pins match what the server
   serves?) → surfaces naturally in **E2E**, where the real app talks to the real
@@ -117,7 +117,7 @@ real-hardware verification — see §2).
 | ID | Scenario | Prio | Coverage | Status |
 |---|---|---|---|---|
 | E2E-01 | Connect to server by URL + TLS trust-on-first-use (confirm fingerprint) | P1 | Automated | Done (`flows/p1-spine.yaml`) |
-| E2E-02 | Sign in with ABS credentials (server-proxied); session survives app restart | P1 | Automated | Done (`flows/p1-spine.yaml`) |
+| E2E-02 | Sign in with ABS credentials → server-issued Ratatoskr token; session survives app restart | P1 | Automated | Done (`flows/p1-spine.yaml`) |
 | E2E-03 | Browse + search the library | P1 | Automated | Done (`flows/p1-spine.yaml`) |
 | E2E-04 | Start a book on a speaker → resumes from stored position | P1 | control/state automated · audio manual | Done (`flows/p1-spine.yaml`) |
 | E2E-05 | Now-playing: play / pause / seek / stop | P1 | control/state automated · audio manual | Done (`p1-spine`/`p1-pause`/`p1-stop` + fake transport-state asserts) |
@@ -126,6 +126,8 @@ real-hardware verification — see §2).
 | E2E-08 | 401 → silent token refresh; active session continues | P2 | — | Retired (token rotation removed by server ADR-0001; the app holds a non-expiring Ratatoskr token) |
 | E2E-09 | Speaker disappears mid-session | P2 | Automated | Done (`flows/p2-speaker-lost.yaml` + relinquish recovery) |
 | E2E-10 | ABS unreachable → sensible error surfaced in the app | P2 | Automated | Done (`flows/p2-abs-down.yaml` + recovery) |
+| E2E-11 | Server restart while signed in (idle) → no re-login; the session store survives | P2 | Automated | Done (`flows/p2-server-restarted.yaml`) |
+| E2E-12 | Server's ABS session dies → targeted password prompt (not a generic sign-out) + recovery | P2 | Automated | Done (`flows/p2-upstream-session-lost.yaml` + recovery) |
 
 **Setup requirements implied by these scenarios:**
 
@@ -133,6 +135,17 @@ real-hardware verification — see §2).
   black box — needed to assert progress in E2E-06.
 - ABS needs **fixture data**: a known user + at least one audiobook with a known
   starting position (E2E-04, E2E-06).
+- The harness must also be able to **mutate ABS state** through its admin API —
+  E2E-12 renames the app's ABS account, which is what makes ABS refuse the
+  refresh token the server stored for the device (server ADR-0001).
+- The server must be restartable **with a shortened keep-alive interval**
+  (`KEEP_ALIVE_REFRESH_INTERVAL_MS`, server SPEC §7) so E2E-12's boot pass
+  provokes that refusal at once instead of waiting out the daily sweep. Only for
+  that one restart: ABS rate-limits authentication (~40 requests, `/login`
+  included), so a permanently short sweep would 429 the suite's own sign-ins.
+  Applying an env change means recreating the container, so the server's
+  generated TLS certificate needs a volume of its own — otherwise the recreate
+  mints a new one and every later flow fails the fingerprint E2E-01 pinned.
 - **Single active session** is a system invariant (one book on one speaker at a
   time) — scenarios must not assume concurrent sessions.
 
@@ -246,7 +259,7 @@ failure points at the harness); `main` × `main` is the optional informational r
    app an `.apk`, both as promotable candidates.
 4. **Done:** the E2E suite is built against those artifacts (docker-compose
    stack: server + ABS + fake Sonos; app via emulator) — all P1/P2 scenarios
-   E2E-01..10 are automated.
+   E2E-01..12 are automated.
 5. **Done:** CI (§6) is wired — `repository_dispatch` on server/app candidates,
    plus manual `workflow_dispatch`.
 6. **Now:** work down the remaining open points (§9) and add scenarios to §5 as

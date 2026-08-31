@@ -27,7 +27,8 @@ See [Roadmap in the test concept](./test-concept.md#8-roadmap) for details.
 - **[compose.e2e.yaml](./compose.e2e.yaml)** – the stack: ABS + fake Sonos + server.
 - **[flows/](./flows/)** – Maestro flows driving the app black-box (P1 spine).
 - **[scripts/](./scripts/)** – `run-e2e.sh` orchestrator, ABS seeding + progress
-  assertion, artifact fetch, fixture generator.
+  assertion, the ABS account rename E2E-12 kills the server's upstream session
+  with, artifact fetch, fixture generator.
 - **[.github/workflows/e2e.yml](./.github/workflows/e2e.yml)** – the CI suite.
 
 ## Related repos

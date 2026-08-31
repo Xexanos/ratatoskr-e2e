@@ -17,6 +17,11 @@ cd "$root"
 COMPOSE=(docker compose -f compose.e2e.yaml)
 ENV_FILE="$root/.e2e.env"
 ARTIFACTS_ENV="$root/.e2e.artifacts.env"
+# Readiness probe for the server, on the major the suite now drives (server ADR-0001 cut the app
+# over to /v2; /v1 is frozen and only still served for older clients). Probing /v2 makes a server
+# image that predates the cut fail here, with the URL naming why, instead of surviving into a
+# Maestro flow that then misses a selector for an unrelated-looking reason.
+SERVER_HEALTH="https://localhost:8080/v2/health"
 
 # Source a dotenv file if it exists, exporting its vars. Returns 0 when the file is absent, so a
 # bare call under `set -e` does not abort the script - the header promises image refs may come
@@ -84,7 +89,7 @@ cmd_up() {
 
   echo "run-e2e: starting the server"
   "${COMPOSE[@]}" up -d ratatoskr
-  wait_http "https://localhost:8080/v1/health" insecure
+  wait_http "$SERVER_HEALTH" insecure
 
   # Record the server cert's SHA-256 fingerprint for the TOFU assertion (E2E-01). The entrypoint
   # generates a fresh self-signed cert per run, so it must be read at runtime. Format it exactly
@@ -187,11 +192,13 @@ cmd_p1() {
 
 cmd_drive() { drive_prep; cmd_p1; cmd_p2; }
 
-# ---- P2 failure cases (test-concept.md §5, E2E-07/09/10) ----
+# ---- P2 failure cases (test-concept.md §5, E2E-07/09/10/11/12) ----
 #
 # Ordering is deliberate:
 #   E2E-10 first (ABS down/up) - no active session, so the only moving part is the library query.
 #   E2E-09 next (speaker down/up) - starts and loses a session; recovery ends session-less.
+#   E2E-11 then E2E-12 - the two auth-model scenarios, both of which need the app signed in and
+#     idle, which is exactly the state E2E-09's recovery leaves behind.
 #   E2E-07 last - sign-out ends the signed-in state everything else depends on.
 cmd_p2() {
   echo "run-e2e: E2E-10 - stopping ABS (unreachable mid-run)"
@@ -213,11 +220,65 @@ cmd_p2() {
   wait_fake_soap   # don't let a slow fake boot eat p2-session-relinquished's 30s window
   maestro test "$root/flows/p2-session-relinquished.yaml"
 
+  # E2E-11: server ADR-0001's hard requirement - a restart must never force a re-login. `stop` +
+  # `start` restarts the very same container, so nothing but the process changes: the session store
+  # on /data, the certificate on /tls and the store key in the environment all stay exactly as they
+  # were, which is what makes the flow's "still signed in" a statement about the store alone.
+  echo "run-e2e: E2E-11 - restarting the server while signed in (idle)"
+  "${COMPOSE[@]}" stop ratatoskr
+  "${COMPOSE[@]}" start ratatoskr
+  wait_http "$SERVER_HEALTH" insecure
+  maestro test "$root/flows/p2-server-restarted.yaml" -e BOOK_TITLE="$E2E_BOOK_TITLE"
+
+  # E2E-12: kill the server's Audiobookshelf chain the way ADR-0001 documents - rename the account
+  # upstream, so ABS refuses the refresh token the server stored for this device. The rename
+  # happens while the server is down, so the boot pass on the way back up is what discovers it.
+  #
+  # That boot pass only renews chains older than KEEP_ALIVE_REFRESH_INTERVAL_MS, so the interval is
+  # shortened for this restart alone - which needs a RECREATE (`up -d`), since compose only applies
+  # an environment change by replacing the container. The certificate survives that because it sits
+  # on its own volume (compose.e2e.yaml), so the app's E2E-01 fingerprint still matches. Thirty
+  # seconds: far below the chain's age by now (it was minted at sign-in, several scenarios ago) yet
+  # long enough that the sweeps after the recovery below do not eat into the roughly forty
+  # authentication requests ABS allows before it starts answering 429.
+  dead_abs_user="$E2E_ABS_USER-renamed"
+  echo "run-e2e: E2E-12 - renaming the app's ABS account so the server's chain dies"
+  "${COMPOSE[@]}" stop ratatoskr
+  bash "$root/scripts/abs-rename-user.sh" "$E2E_ABS_USER" "$dead_abs_user" "$ENV_FILE"
+  KEEP_ALIVE_REFRESH_INTERVAL_MS=30000 "${COMPOSE[@]}" up -d ratatoskr
+  wait_http "$SERVER_HEALTH" insecure
+  maestro test "$root/flows/p2-upstream-session-lost.yaml" -e ABS_USER="$E2E_ABS_USER"
+
+  # Only now put the name back - the targeted prompt above is the proof the chain is dead, so
+  # reversing the rename after it can no longer make that outcome ambiguous. It has to happen
+  # before the re-login: the user only types a password there, but the app signs in with the
+  # username it had remembered and pre-filled.
+  echo "run-e2e: E2E-12 - restoring the ABS account, then recovering with the password"
+  bash "$root/scripts/abs-rename-user.sh" "$dead_abs_user" "$E2E_ABS_USER" "$ENV_FILE"
+  maestro test "$root/flows/p2-upstream-session-recovered.yaml" \
+    -e ABS_PASS="$E2E_ABS_PASS" -e BOOK_TITLE="$E2E_BOOK_TITLE"
+
   echo "run-e2e: E2E-07 - signing out"
   maestro test "$root/flows/p2-signout.yaml"
 }
 
-cmd_down() { "${COMPOSE[@]}" down -v || true; }
+# Teardown, volumes included - the session store and the generated certificate are deliberately
+# throwaway, fresh per run.
+#
+# Compose interpolates the WHOLE file for `down` too, so the `:?` guards on the image refs and the
+# keys abort it when nothing has loaded the environment - and the `|| true` below would then hide
+# that, leaving the volumes in place. The next `up` generates a new SESSION_STORE_KEY, meets the
+# previous run's store on the surviving volume, and the server refuses to start on a store it
+# cannot decrypt. So load whatever this run recorded and fill the gaps with placeholders: tearing
+# down cares about none of those values, and teardown has to work even for a run that failed
+# before it wrote them.
+cmd_down() {
+  load_artifacts
+  source_env "$ENV_FILE"
+  SERVER_IMAGE="${SERVER_IMAGE:-none}" FAKE_SONOS_IMAGE="${FAKE_SONOS_IMAGE:-none}" \
+    ABS_STREAMER_API_KEY="${ABS_STREAMER_API_KEY:-none}" SESSION_STORE_KEY="${SESSION_STORE_KEY:-none}" \
+    "${COMPOSE[@]}" down -v || true
+}
 
 case "${1:-all}" in
   up) cmd_up ;;

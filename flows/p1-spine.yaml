@@ -51,7 +51,7 @@ env:
 
 # ---------- E2E-02 (cont.): session survives an app restart ----------
 - stopApp
-- launchApp                    # no clearState: trusted server + tokens must persist
+- launchApp                    # no clearState: the trusted server + the session token persist
 - assertVisible:
     id: "library_search"       # straight to the library, not Connect/SignIn
 
