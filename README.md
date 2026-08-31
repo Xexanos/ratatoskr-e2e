@@ -69,7 +69,10 @@ bash scripts/run-e2e.sh down
 ```
 
 `run-e2e.sh all` does 2–4 in one go. The server validates the ABS streamer key at
-startup, so `up` deliberately seeds ABS **before** starting the server.
+startup, so `up` deliberately seeds ABS **before** starting the server. A teardown
+that fails exits non-zero rather than passing quietly — the stack is then still up
+with ports 8080/13378 bound, and the surviving `ratatoskr-data` volume makes the
+next `up` fail on a session store the freshly generated key cannot decrypt.
 
 ## Tests in CI
 

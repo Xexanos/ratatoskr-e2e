@@ -266,18 +266,27 @@ cmd_p2() {
 # throwaway, fresh per run.
 #
 # Compose interpolates the WHOLE file for `down` too, so the `:?` guards on the image refs and the
-# keys abort it when nothing has loaded the environment - and the `|| true` below would then hide
-# that, leaving the volumes in place. The next `up` generates a new SESSION_STORE_KEY, meets the
-# previous run's store on the surviving volume, and the server refuses to start on a store it
-# cannot decrypt. So load whatever this run recorded and fill the gaps with placeholders: tearing
-# down cares about none of those values, and teardown has to work even for a run that failed
-# before it wrote them.
+# keys abort it when nothing has loaded the environment, leaving the volumes in place. The next
+# `up` generates a new SESSION_STORE_KEY, meets the previous run's store on the surviving volume,
+# and the server refuses to start on a store it cannot decrypt. So load whatever this run recorded
+# and fill the gaps with placeholders: tearing down cares about none of those values, and teardown
+# has to work even for a run that failed before it wrote them.
+#
+# With those in place a parse failure can no longer happen, so whatever still fails here is real -
+# the daemon gone, a volume held elsewhere - and is reported instead of swallowed: a teardown that
+# fails silently is precisely what leaves the stale volume behind. Non-zero is meant to be fatal
+# locally, where the next `up` is the one that pays for it; CI tolerates it on its ephemeral
+# runners (see the workflow's teardown step for why).
 cmd_down() {
   load_artifacts
   source_env "$ENV_FILE"
   SERVER_IMAGE="${SERVER_IMAGE:-none}" FAKE_SONOS_IMAGE="${FAKE_SONOS_IMAGE:-none}" \
     ABS_STREAMER_API_KEY="${ABS_STREAMER_API_KEY:-none}" SESSION_STORE_KEY="${SESSION_STORE_KEY:-none}" \
-    "${COMPOSE[@]}" down -v || true
+    "${COMPOSE[@]}" down -v || {
+      echo "run-e2e: teardown failed - the stack may still be up (ports 8080/13378 bound), and a" >&2
+      echo "run-e2e: surviving ratatoskr-data volume breaks the next 'up' on an unreadable store." >&2
+      return 1
+    }
 }
 
 case "${1:-all}" in
