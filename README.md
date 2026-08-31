@@ -8,7 +8,7 @@ Ratatoskr lets a user play Audiobookshelf audiobooks on Sonos speakers from a ph
 
 ## Current status
 
-The overarching [test concept](./test-concept.md) plus the **P1 E2E harness**: a docker-compose stack (server + ABS + fake Sonos), Maestro flows that drive the installed app APK on an emulator, and a CI workflow. It exercises the P1 scenario spine (E2E-01…06). The P2 failure cases are a fast-follow.
+The overarching [test concept](./test-concept.md) plus the **E2E harness**: a docker-compose stack (server + ABS + fake Sonos), Maestro flows that drive the installed app APK on an emulator, and a CI workflow. Every P1 and P2 scenario is automated — the P1 spine (E2E-01…06) and the P2 failure cases (E2E-07 and E2E-09…12); E2E-08 was retired when server ADR-0001 removed token rotation. What remains is the open-points list in the test concept, plus new scenarios as features land.
 
 See [Roadmap in the test concept](./test-concept.md#8-roadmap) for details.
 
@@ -16,7 +16,7 @@ See [Roadmap in the test concept](./test-concept.md#8-roadmap) for details.
 
 - **[test-concept.md](./test-concept.md)** – overarching test strategy: test levels & types, the central/repo-local split, and E2E scenarios.
 - **[compose.e2e.yaml](./compose.e2e.yaml)** – the stack: ABS + fake Sonos + server.
-- **[flows/](./flows/)** – Maestro flows driving the app black-box (P1 spine).
+- **[flows/](./flows/)** – Maestro flows driving the app black-box: the P1 spine, the P2 failure cases, and a locale canary.
 - **[scripts/](./scripts/)** – `run-e2e.sh` orchestrator, ABS seeding + progress assertion, the ABS account rename E2E-12 kills the server's upstream session with, artifact fetch, fixture generator.
 - **[.github/workflows/e2e.yml](./.github/workflows/e2e.yml)** – the CI suite.
 
