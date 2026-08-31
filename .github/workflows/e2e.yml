@@ -191,9 +191,21 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with: { name: e2e-logs, path: logs, retention-days: 14 }
 
+      # run-e2e.sh exits non-zero when the teardown really fails, which is what makes the local
+      # up/down cycle fatal - there a surviving ratatoskr-data volume breaks the next run. Here it
+      # must NOT be: the runner is thrown away, so nothing survives to poison anything, while this
+      # step sits BEFORE the verdict and promote steps below, which key off job.status / success().
+      # Left fatal, a docker hiccup during teardown would report a green E2E as red on the
+      # producer's commit and skip the promote. continue-on-error keeps the job green; the
+      # annotation puts the failure in the run summary rather than losing it in a step log.
       - name: Tear down
         if: always()
-        run: bash scripts/run-e2e.sh down
+        continue-on-error: true
+        run: |
+          if ! bash scripts/run-e2e.sh down; then
+            echo "::warning::E2E teardown failed - the stack may still be up on this runner; see this step's log."
+            exit 1
+          fi
 
       # Report the cross-component verdict back onto the producer's commit as a plain "e2e" commit
       # status, so the result shows up in that repo (on the commit / its checks) without anyone

@@ -266,18 +266,26 @@ cmd_p2() {
 # throwaway, fresh per run.
 #
 # Compose interpolates the WHOLE file for `down` too, so the `:?` guards on the image refs and the
-# keys abort it when nothing has loaded the environment - and the `|| true` below would then hide
-# that, leaving the volumes in place. The next `up` generates a new SESSION_STORE_KEY, meets the
-# previous run's store on the surviving volume, and the server refuses to start on a store it
-# cannot decrypt. So load whatever this run recorded and fill the gaps with placeholders: tearing
-# down cares about none of those values, and teardown has to work even for a run that failed
-# before it wrote them.
+# keys abort it when nothing has loaded the environment, leaving the volumes in place. The next
+# `up` generates a new SESSION_STORE_KEY, meets the previous run's store on the surviving volume,
+# and the server refuses to start on a store it cannot decrypt. So load whatever this run recorded
+# and fill the gaps with placeholders: tearing down cares about none of those values, and teardown
+# has to work even for a run that failed before it wrote them.
+#
+# With those in place a parse failure can no longer happen, so whatever still fails here is real -
+# the daemon gone, a volume held elsewhere - and is reported instead of swallowed: a teardown that
+# fails silently is precisely what leaves the stale volume behind. Non-zero is meant to be fatal
+# locally, where the next `up` is the one that pays for it; CI tolerates it on its ephemeral
+# runners (see the workflow's teardown step for why).
 cmd_down() {
   load_artifacts
   source_env "$ENV_FILE"
   SERVER_IMAGE="${SERVER_IMAGE:-none}" FAKE_SONOS_IMAGE="${FAKE_SONOS_IMAGE:-none}" \
     ABS_STREAMER_API_KEY="${ABS_STREAMER_API_KEY:-none}" SESSION_STORE_KEY="${SESSION_STORE_KEY:-none}" \
-    "${COMPOSE[@]}" down -v || true
+    "${COMPOSE[@]}" down -v || {
+      echo "run-e2e: teardown failed - the stack may still be up; a surviving volume breaks the next 'up'" >&2
+      return 1
+    }
 }
 
 case "${1:-all}" in
@@ -288,7 +296,10 @@ case "${1:-all}" in
   down) cmd_down ;;
   # Tear down on exit (success or failure) so a failed local `all` run never leaves the stack up
   # with host ports 8080/13378 bound, colliding with the next attempt. (CI runs up/drive/down as
-  # separate steps and relies on the workflow's if: always() teardown instead.)
+  # separate steps and relies on the workflow's if: always() teardown instead.) A teardown that
+  # fails inside the trap replaces the run's exit code with its own 1 - accepted rather than worked
+  # around: it can only turn a green run red, never hide a red one, and every failure this suite
+  # raises is a 1 anyway.
   all) trap cmd_down EXIT; cmd_up; cmd_drive ;;
   *) echo "usage: run-e2e.sh {up|drive|drive-p1|drive-p2|down|all}" >&2; exit 2 ;;
 esac
